@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#14b8a6" rx="100" ry="100"/>
+  <path d="M150 200 L256 100 L362 200 L362 400 L150 400 Z" fill="white"/>
+  <text x="256" y="350" font-family="Arial" font-size="120" fill="#14b8a6" text-anchor="middle" font-weight="bold">得</text>
+</svg>

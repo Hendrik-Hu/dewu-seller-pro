@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">DewuSellerPro</string>
+    <string name="title_activity_main">DewuSellerPro</string>
+    <string name="package_name">com.dewu.sellerpro</string>
+    <string name="custom_url_scheme">com.dewu.sellerpro</string>
+</resources>
