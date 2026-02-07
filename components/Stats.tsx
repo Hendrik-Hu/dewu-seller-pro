@@ -1,10 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell
 } from 'recharts';
 import { Sparkles, Bot, Send } from 'lucide-react';
 import { Product, Activity } from '../types';
+import { AIAssistantModal } from './AIAssistantModal';
 
 interface StatsProps {
   products: Product[];
@@ -14,6 +15,7 @@ interface StatsProps {
 const COLORS = ['#14b8a6', '#0f766e', '#0d9488', '#ccfbf7'];
 
 export const Stats: React.FC<StatsProps> = ({ products, activities }) => {
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   
   // --- Calculation Logic ---
   const stats = useMemo(() => {
@@ -166,32 +168,36 @@ export const Stats: React.FC<StatsProps> = ({ products, activities }) => {
       </div>
 
       {/* AI Chat Module */}
-      <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm mb-6 overflow-hidden flex flex-col">
+      <div 
+        onClick={() => setIsAIModalOpen(true)}
+        className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm mb-6 overflow-hidden flex flex-col cursor-pointer hover:shadow-md transition-shadow group"
+      >
         <div className="bg-gradient-to-r from-indigo-600 to-violet-600 p-3 flex items-center justify-between">
             <div className="flex items-center space-x-2 text-white">
                 <Bot size={18} />
                 <span className="text-sm font-bold">AI 经营助手</span>
             </div>
-            <span className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded-full">Beta</span>
+            <span className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded-full group-hover:bg-white/30 transition-colors">点击展开</span>
         </div>
         
         {/* Chat Area */}
-        <div className="p-4 bg-slate-50 dark:bg-black h-40 overflow-y-auto space-y-3">
+        <div className="p-4 bg-slate-50 dark:bg-black h-40 overflow-y-auto space-y-3 pointer-events-none">
             <div className="flex items-start space-x-2">
                 <div className="w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center flex-shrink-0">
                     <Sparkles size={12} className="text-indigo-600 dark:text-indigo-400" />
                 </div>
                 <div className="bg-white dark:bg-zinc-800 p-2.5 rounded-2xl rounded-tl-none border border-slate-100 dark:border-zinc-700 text-xs text-slate-600 dark:text-zinc-300 shadow-sm">
-                    👋 嗨！我是你的智能助手。本月利润率为 <span className="font-bold text-slate-900 dark:text-white">{stats.profitRate.toFixed(1)}%</span>，继续保持！
+                    👋 嗨！我是你的智能助手。本月利润率为 <span className="font-bold text-slate-900 dark:text-white">{stats.profitRate.toFixed(1)}%</span>，点击这里让我为你详细分析库存和销售趋势！
                 </div>
             </div>
         </div>
 
         {/* Input Area */}
-        <div className="p-3 bg-white dark:bg-zinc-900 border-t border-slate-100 dark:border-zinc-800 flex items-center space-x-2">
+        <div className="p-3 bg-white dark:bg-zinc-900 border-t border-slate-100 dark:border-zinc-800 flex items-center space-x-2 pointer-events-none">
             <input 
                 type="text" 
-                placeholder="向 AI 提问数据趋势..." 
+                placeholder="点击向 AI 提问..." 
+                readOnly
                 className="flex-1 bg-slate-50 dark:bg-black text-xs py-2 px-3 rounded-lg outline-none focus:ring-1 focus:ring-indigo-500 transition-all dark:text-white dark:placeholder-zinc-600"
             />
             <button className="p-2 bg-indigo-600 text-white rounded-lg active:scale-95 transition-transform">
@@ -199,6 +205,13 @@ export const Stats: React.FC<StatsProps> = ({ products, activities }) => {
             </button>
         </div>
       </div>
+
+      <AIAssistantModal 
+        isOpen={isAIModalOpen} 
+        onClose={() => setIsAIModalOpen(false)}
+        products={products}
+        activities={activities}
+      />
 
       {/* Revenue Chart */}
       <div className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm mb-6">
