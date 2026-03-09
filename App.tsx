@@ -599,6 +599,10 @@ export default function App() {
             todaySalesCount={todaySales.count} // Pass real data
             onAvatarClick={() => setCurrentTab(Tab.ME)}
             products={products} // Pass products for inventory stats
+            onAIManageExecuted={() => {
+              fetchData();
+              setRefreshTrigger(prev => prev + 1);
+            }}
           />
         );
       case Tab.PRODUCTS:
@@ -660,6 +664,10 @@ export default function App() {
             todaySalesCount={todaySales.count}
             onAvatarClick={() => setCurrentTab(Tab.ME)}
             products={products}
+            onAIManageExecuted={() => {
+              fetchData();
+              setRefreshTrigger(prev => prev + 1);
+            }}
           />;
     }
   };

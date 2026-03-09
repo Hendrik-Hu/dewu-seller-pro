@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Send, Bot, Loader2, Sparkles } from 'lucide-react';
+import { X, Send, Loader2, Sparkles } from 'lucide-react';
 import { Product, Activity } from '../types';
 
 interface AIAssistantModalProps {
@@ -14,10 +14,6 @@ interface Message {
   content: string;
 }
 
-// Hardcoded configuration as requested
-const API_KEY = 'sk-2cdad215142e4b4382ded48955001e39';
-const PROVIDER = 'deepseek'; // Assuming DeepSeek based on context
-
 export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
   isOpen,
   onClose,
@@ -29,6 +25,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -95,39 +92,44 @@ Rules:
 
     try {
       const systemPrompt = generateSystemPrompt();
-      
-      let apiUrl = 'https://api.openai.com/v1/chat/completions';
-      let model = 'gpt-3.5-turbo';
-
-      if (PROVIDER === 'deepseek') {
-        apiUrl = 'https://api.deepseek.com/chat/completions';
-        model = 'deepseek-chat';
-      }
-
+      const apiUrl = import.meta.env.VITE_AGENT_API_URL || '/api/agent/chat';
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${API_KEY}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            ...messages.filter(m => m.role !== 'system').slice(-5), // Keep last 5 messages for context
-            { role: 'user', content: userMsg }
-          ],
-          temperature: 0.7
+          message: userMsg,
+          context: systemPrompt,
+          conversationId
         })
       });
 
-      const data = await response.json();
-      
-      if (data.error) {
-        throw new Error(data.error.message);
+      const raw = await response.text();
+      let data: any = {};
+      if (raw) {
+        try {
+          data = JSON.parse(raw);
+        } catch {
+          if (response.status === 404) {
+            throw new Error('本地开发未启用后端接口，请使用 vercel dev 或配置 VITE_AGENT_API_URL');
+          }
+          throw new Error(`Agent 接口返回了非 JSON 响应（HTTP ${response.status}）`);
+        }
       }
 
-      const aiContent = data.choices?.[0]?.message?.content || '抱歉，我暂时无法回答。';
+      if (!response.ok) {
+        throw new Error(data.error || `Agent 调用失败（HTTP ${response.status}）`);
+      }
+
+      if (!raw) {
+        throw new Error('Agent 接口返回空响应');
+      }
+
+      const aiContent = data.reply || '抱歉，我暂时无法回答。';
+      if (data.conversationId) {
+        setConversationId(data.conversationId);
+      }
       
       setMessages(prev => [...prev, { role: 'assistant', content: aiContent }]);
 

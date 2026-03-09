@@ -1,8 +1,9 @@
 import React from 'react';
-import { ShoppingBag, Truck, Package, ArrowDownRight, ArrowUpRight, AlertCircle, ChevronRight, Clock, Sparkles } from 'lucide-react';
+import { ShoppingBag, Truck, Package, ArrowDownRight, ArrowUpRight, AlertCircle, ChevronRight, Clock, Sparkles, Bot } from 'lucide-react';
 import { Activity, Product } from '../types';
 import { InventoryStatsModal } from './InventoryStatsModal';
 import { AIAssistantModal } from './AIAssistantModal';
+import { AIManagementModal } from './AIManagementModal';
 
 interface HomeProps {
   username: string;
@@ -17,6 +18,7 @@ interface HomeProps {
   todaySalesAmount: number;
   todaySalesCount: number;
   products: Product[];
+  onAIManageExecuted?: () => void;
 }
 
 export const Home: React.FC<HomeProps> = ({ 
@@ -31,12 +33,14 @@ export const Home: React.FC<HomeProps> = ({
   pendingOrderCount,
   todaySalesAmount,
   todaySalesCount,
-  products
+  products,
+  onAIManageExecuted
 }) => {
   // Inventory Modal State
   const [showInventoryModal, setShowInventoryModal] = React.useState(false);
   // AI Assistant Modal State
   const [showAIModal, setShowAIModal] = React.useState(false);
+  const [showAIManageModal, setShowAIManageModal] = React.useState(false);
 
   const formatTime = (dateString?: string) => {
     if (!dateString) return '';
@@ -144,6 +148,21 @@ export const Home: React.FC<HomeProps> = ({
             <span className="text-xs font-medium text-slate-600 dark:text-zinc-300">AI 分析</span>
           </button>
         </div>
+        <button
+          onClick={() => setShowAIManageModal(true)}
+          className="mt-3 w-full bg-white dark:bg-zinc-900 rounded-2xl p-4 border border-cyan-100 dark:border-cyan-900/30 shadow-sm flex items-center justify-between active:scale-[0.99] transition-transform"
+        >
+          <div className="flex items-center space-x-3">
+            <div className="bg-cyan-50 dark:bg-cyan-900/30 p-2 rounded-xl">
+              <Bot size={18} className="text-cyan-600 dark:text-cyan-400" />
+            </div>
+            <div className="text-left">
+              <div className="text-sm font-semibold text-slate-900 dark:text-white">AI 管理</div>
+              <div className="text-xs text-slate-500 dark:text-zinc-400">用自然语言生成库存操作计划</div>
+            </div>
+          </div>
+          <ChevronRight size={16} className="text-slate-300 dark:text-zinc-600" />
+        </button>
       </div>
 
       {/* Inventory Stats Modal */}
@@ -159,6 +178,12 @@ export const Home: React.FC<HomeProps> = ({
         onClose={() => setShowAIModal(false)}
         products={products}
         activities={activities}
+      />
+      <AIManagementModal
+        isOpen={showAIManageModal}
+        onClose={() => setShowAIManageModal(false)}
+        products={products}
+        onExecuted={onAIManageExecuted}
       />
 
       {/* Recent Activity */}
