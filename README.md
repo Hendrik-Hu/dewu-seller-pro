@@ -1,55 +1,117 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
-
 # Dewu Seller Pro
 
-## 本地运行
+得物卖家库存管理与 AI 经营助手。项目面向移动端使用，支持商品入库、出库、仓库管理、库存统计、经营数据图表，以及通过 Supabase 和 Coze Agent 执行 AI 分析与库存操作。
 
-1. 安装依赖：`npm install`
-2. 启动前端：`npm run dev`
+## Tech Stack
 
-默认前端地址：`http://localhost:3000`
+- React 19 + TypeScript
+- Vite
+- Supabase Auth / Database / Storage / Edge Functions
+- Coze Agent
+- Capacitor Android
+- Recharts
+- lucide-react
 
-如果你要在本地调通 Agent 接口，请额外启动：
+## Local Setup
 
-- `npm run dev:agent`
-- 并在 `.env.local` 配置：
-  - `VITE_AGENT_API_URL=http://localhost:3001/api/agent/chat`
-  - `VITE_AGENT_MANAGE_API_URL=http://localhost:3001/api/agent/manage`
+1. 安装依赖
 
-## 生产接入 Coze Agent
+   ```powershell
+   .\install_deps.ps1
+   ```
 
-本项目采用「前端调用本项目后端 API，后端再调用 Coze」的架构，避免在浏览器暴露密钥。
-当前后端默认按 `stream_run` 方式调用 Coze 项目接口。
+   或者使用系统自带 Node.js：
 
-### 1) 配置服务端环境变量
+   ```powershell
+   npm install
+   ```
 
-在部署平台（如 Vercel）配置以下变量：
+2. 创建本地环境变量
 
-- `COZE_STREAM_RUN_URL`：例如 `https://your-subdomain.coze.site/stream_run`
-- `COZE_PROJECT_ID`：Coze 项目 ID（数字）
-- `COZE_STREAM_TOKEN`：`Authorization: Bearer` 使用的 token
-- `COZE_PAT`：可选，未配置 `COZE_STREAM_TOKEN` 时作为兜底 token
-- `COZE_MANAGE_STREAM_RUN_URL`：可选，AI 管理专用 stream_run 地址
-- `COZE_MANAGE_PROJECT_ID`：可选，AI 管理专用项目 ID
-- `COZE_MANAGE_STREAM_TOKEN`：可选，AI 管理专用 token
+   ```powershell
+   Copy-Item .env.example .env.local
+   ```
 
-### 2) 可选前端环境变量
+   至少填写：
 
-- `VITE_AGENT_API_URL`：可选，默认使用同域 `/api/agent/chat`
-- `VITE_AGENT_MANAGE_API_URL`：可选，默认使用同域 `/api/agent/manage`
+   ```env
+   VITE_SUPABASE_URL=
+   VITE_SUPABASE_ANON_KEY=
+   ```
 
-### 3) 已实现的接口
+3. 启动前端
 
-- `POST /api/agent/chat`
-  - 入参：`message`、`context`（可选）、`conversationId`（可选）、`userId`（可选）
-  - 出参：`reply`、`conversationId`（对应 stream_run 的 `session_id`）
-- `POST /api/agent/manage`
-  - 入参：`message`、`confirm`、`conversationId`（可选）、`inventorySnapshot`（可选）
-  - 出参：`reply`、`conversationId`、`requiresConfirmation`、`executionConfirmed`、`executed`、`dryRun`、`actions`
+   ```powershell
+   .\run_dev.ps1
+   ```
 
-## 部署
+   或：
 
-- 推荐部署到 Vercel，前端静态资源与 `/api/agent/chat` 服务端函数同域运行。
-- `vercel.json` 已保留 `/api/*` 路由，不会被 SPA rewrite 覆盖。
+   ```powershell
+   npm run dev
+   ```
+
+4. 如果要本地调通 Agent 接口，再额外启动：
+
+   ```powershell
+   npm run dev:agent
+   ```
+
+   可选前端变量：
+
+   ```env
+   VITE_AGENT_API_URL=http://localhost:3001/api/agent/chat
+   VITE_AGENT_MANAGE_API_URL=http://localhost:3001/api/agent/manage
+   ```
+
+## Scripts
+
+```powershell
+npm run dev            # Start Vite dev server
+npm run dev:agent      # Start local Coze agent bridge
+npm run build          # Build web app to dist/
+npm run preview        # Preview production build
+npm run typecheck      # Run TypeScript checks
+npm run android:sync   # Build and sync Capacitor Android project
+.\build_apk.ps1        # Build Android debug APK
+```
+
+如果 Windows 全局没有 `npm`，项目里的 PowerShell 脚本会优先使用本地 `node-v20.11.0-win-x64`。
+
+## Project Structure
+
+```text
+components/                 React UI screens and modals
+services/                   Supabase data access helpers
+lib/supabase.ts             Supabase client bootstrap
+supabase/functions/         Edge Functions for AI and SKU lookup
+api/agent/                  Coze bridge endpoints for web deployment
+android/                    Capacitor Android project
+public/                     PWA manifest and icon
+```
+
+## Supabase Notes
+
+项目根目录内的 SQL 文件记录了当前数据库结构补丁和优化步骤，例如：
+
+- `setup_storage.sql`
+- `fix_activities_rls.sql`
+- `add_platform_column.sql`
+- `add_source_column.sql`
+- `db_data_layer_optimization.sql`
+
+AI 库存管理逻辑位于 `supabase/functions/ai-manager`，它会鉴权当前用户，并在服务端使用 service role 执行入库/出库相关操作。所需密钥说明见 `supabase/functions/ai-manager/README.md`。
+
+## Coze Agent Deployment
+
+生产环境建议将前端与 `/api/agent/*` 部署到同域，例如 Vercel。服务端需要按需配置：
+
+- `COZE_STREAM_RUN_URL`
+- `COZE_PROJECT_ID`
+- `COZE_STREAM_TOKEN`
+- `COZE_PAT`（可选）
+- `COZE_MANAGE_STREAM_RUN_URL`（可选）
+- `COZE_MANAGE_PROJECT_ID`（可选）
+- `COZE_MANAGE_STREAM_TOKEN`（可选）
+
+`vercel.json` 已保留 `/api/*` 路由，不会被 SPA rewrite 覆盖。

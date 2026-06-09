@@ -16,9 +16,12 @@ export interface Product {
   price: number;
   stock: number;
   imageUrl: string;
-  status: 'instock' | 'shipping' | 'sold';
+  status: 'instock' | 'shipping' | 'sold' | 'flaw';
   location?: string;
   warehouse?: string;
+  source?: string;
+  imageFile?: File;
+  imageDataUrl?: string;
 }
 
 export interface Activity {

@@ -2,8 +2,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Search, Plus, Boxes, CircleDollarSign, Warehouse as WarehouseIcon, ChevronDown, ChevronLeft, ChevronRight, Check, MapPin, Trash2, Edit, X, Loader2, Star } from 'lucide-react';
 import { Product, Warehouse } from '../types';
 import { supabase } from '../lib/supabase';
+import { listProducts } from '../services/products';
 
 interface ProductListProps {
+  userId: string;
   onAddClick: () => void;
   onEditProduct: (product: Product) => void;
   onDeleteProduct: (productId: string) => void;
@@ -15,7 +17,7 @@ interface ProductListProps {
 
 const ITEMS_PER_PAGE = 50;
 
-export const ProductList: React.FC<ProductListProps> = ({ onAddClick, onEditProduct, onDeleteProduct, warehouses, onRenameWarehouse, onSetDefaultWarehouse, refreshTrigger }) => {
+export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, onEditProduct, onDeleteProduct, warehouses, onRenameWarehouse, onSetDefaultWarehouse, refreshTrigger }) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
@@ -60,62 +62,29 @@ export const ProductList: React.FC<ProductListProps> = ({ onAddClick, onEditProd
 
   // Fetch Products from Backend
   const fetchProducts = async () => {
+    if (!userId || !currentWarehouse) return;
+
     setIsLoading(true);
     try {
-        let query = supabase
-            .from('products')
-            .select('*', { count: 'exact' });
+        const statusMap: Record<string, Product['status'] | undefined> = {
+            all: undefined,
+            '在售': 'instock',
+            '运输中': 'shipping',
+            '已售罄': 'sold',
+            '瑕疵': 'flaw',
+        };
 
-        // 1. Warehouse Filter
-        // If currentWarehouse is set, filter by it. 
-        // Note: Legacy data might handle 'null' warehouse as default, but for strict backend query we check the value.
-        query = query.eq('warehouse', currentWarehouse);
+        const page = await listProducts({
+            userId,
+            warehouse: currentWarehouse,
+            status: statusMap[filter] || undefined,
+            search: searchQuery,
+            page: currentPage,
+            pageSize: ITEMS_PER_PAGE,
+        });
 
-        // 2. Status Filter
-        if (filter !== 'all') {
-            if (filter === '在售') query = query.eq('status', 'instock');
-            else if (filter === '运输中') query = query.eq('status', 'shipping');
-            else if (filter === '已售罄') query = query.eq('status', 'sold');
-            else if (filter === '瑕疵') query = query.eq('status', 'flaw'); // Assuming 'flaw' status exists
-        }
-
-        // 3. Search Query (Backend ILIKE)
-        if (searchQuery.trim()) {
-            const q = searchQuery.trim();
-            // Search in name, sku, or brand
-            query = query.or(`name.ilike.%${q}%,sku.ilike.%${q}%,brand.ilike.%${q}%`);
-        }
-
-        // 4. Pagination
-        const from = (currentPage - 1) * ITEMS_PER_PAGE;
-        const to = from + ITEMS_PER_PAGE - 1;
-        query = query.range(from, to);
-
-        // 5. Ordering
-        query = query.order('created_at', { ascending: false });
-
-        const { data, error, count } = await query;
-
-        if (error) throw error;
-
-        if (data) {
-            // Map DB to Frontend Type
-            const mappedProducts: Product[] = data.map((p: any) => ({
-                id: p.id,
-                name: p.name,
-                brand: p.brand,
-                size: p.size,
-                sku: p.sku,
-                price: p.price,
-                stock: p.stock,
-                imageUrl: p.image_url,
-                status: p.status,
-                location: p.location,
-                warehouse: p.warehouse || '杭州一号仓'
-            }));
-            setProducts(mappedProducts);
-            setTotalCount(count || 0);
-        }
+        setProducts(page.products);
+        setTotalCount(page.totalCount);
     } catch (error) {
         console.error('Error fetching products:', error);
     } finally {
@@ -126,7 +95,7 @@ export const ProductList: React.FC<ProductListProps> = ({ onAddClick, onEditProd
   // Effect to trigger fetch
   useEffect(() => {
     fetchProducts();
-  }, [currentPage, currentWarehouse, filter, searchQuery, refreshTrigger]);
+  }, [userId, currentPage, currentWarehouse, filter, searchQuery, refreshTrigger]);
 
   // Long press handling
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -188,6 +157,8 @@ export const ProductList: React.FC<ProductListProps> = ({ onAddClick, onEditProd
 
   useEffect(() => {
     const fetchStats = async () => {
+        if (!userId || !currentWarehouse) return;
+
         // Fetch aggregation for current warehouse
         // Since we can't easily do SUM via standard client without fetch all, we might skip Value or estimate it.
         // Or we fetch all fields 'price,stock' for this warehouse to calculate.
@@ -195,6 +166,7 @@ export const ProductList: React.FC<ProductListProps> = ({ onAddClick, onEditProd
         const { data } = await supabase
             .from('products')
             .select('price, stock, status')
+            .eq('user_id', userId)
             .eq('warehouse', currentWarehouse)
             .eq('status', 'instock');
         
@@ -205,7 +177,7 @@ export const ProductList: React.FC<ProductListProps> = ({ onAddClick, onEditProd
         }
     };
     fetchStats();
-  }, [currentWarehouse, refreshTrigger]);
+  }, [userId, currentWarehouse, refreshTrigger]);
 
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
@@ -304,7 +276,7 @@ export const ProductList: React.FC<ProductListProps> = ({ onAddClick, onEditProd
            <div className="pr-4">
               <div className="flex items-center space-x-1.5 mb-2 opacity-80">
                  <Boxes size={14} />
-                 <span className="text-xs font-medium">商品数量</span>
+                 <span className="text-xs font-medium">库存件数</span>
               </div>
               <div className="text-2xl font-bold">{warehouseStats.count} <span className="text-xs font-normal opacity-60">件</span></div>
            </div>

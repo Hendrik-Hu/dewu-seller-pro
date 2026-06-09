@@ -1,9 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
-// 1. 填入 Project Settings -> API -> Project URL
-const supabaseUrl = 'https://vitgaeirmnbvgwrpofmf.supabase.co';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// 2. 填入 Project Settings -> API -> Project API keys -> anon public
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZpdGdhZWlybW5idmd3cnBvZm1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxNzM4MjYsImV4cCI6MjA4NTc0OTgyNn0.sBjeDlSG9YqyGOp7WZIVuloqKwKPTdXm7-NST9jUuEs';
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. Copy .env.example to .env.local and fill in the values.');
+}
 
 export const supabase = createClient(supabaseUrl, supabaseKey);

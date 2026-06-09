@@ -11,6 +11,19 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+.env.*
+!.env.example
+
+# Local toolchains and generated archives
+node-v*/
+node-v*.zip
+
+# Capacitor / Android build outputs
+android/app/build/
+android/.gradle/
+android/build/
+android/local.properties
 
 # Editor directories and files
 .vscode/*

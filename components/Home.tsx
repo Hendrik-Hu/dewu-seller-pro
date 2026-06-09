@@ -4,6 +4,7 @@ import { Activity, Product } from '../types';
 import { InventoryStatsModal } from './InventoryStatsModal';
 import { AIAssistantModal } from './AIAssistantModal';
 import { AIManagementModal } from './AIManagementModal';
+import { getActivityGrossAmount, getActivityQuantity } from '../lib/inventoryMetrics';
 
 interface HomeProps {
   username: string;
@@ -85,8 +86,8 @@ export const Home: React.FC<HomeProps> = ({
             <div className="w-full h-[1px] bg-white/20 my-2"></div>
             
             <div className="flex items-baseline justify-between">
-              <span className="text-dewu-50 text-xs opacity-90">销售量</span>
-              <span className="text-lg font-bold">{todaySalesCount} <span className="text-xs font-normal opacity-80">双</span></span>
+              <span className="text-dewu-50 text-xs opacity-90">销售件数</span>
+              <span className="text-lg font-bold">{todaySalesCount} <span className="text-xs font-normal opacity-80">件</span></span>
             </div>
           </div>
         </div>
@@ -104,7 +105,7 @@ export const Home: React.FC<HomeProps> = ({
           </div>
           <div>
             <div className="text-3xl font-bold text-slate-900 dark:text-white mb-1">{pendingOrderCount}</div>
-            <div className="text-slate-400 dark:text-zinc-500 text-xs">待发货订单</div>
+            <div className="text-slate-400 dark:text-zinc-500 text-xs">待发货商品</div>
           </div>
         </button>
       </div>
@@ -228,7 +229,12 @@ export const Home: React.FC<HomeProps> = ({
                          <span>x{activity.count || 1}</span>
                        </div>
                     </div>
-                    <span className="text-sm font-bold text-dewu-600 dark:text-dewu-400">¥{activity.price}</span>
+                    <div className="text-right">
+                      <span className="text-sm font-bold text-dewu-600 dark:text-dewu-400">¥{getActivityGrossAmount(activity)}</span>
+                      {getActivityQuantity(activity) > 1 && (
+                        <div className="text-[10px] text-slate-400 dark:text-zinc-500">单价 ¥{activity.price}</div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

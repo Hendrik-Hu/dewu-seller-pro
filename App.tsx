@@ -13,6 +13,10 @@ import { WidgetSettingsModal } from './components/WidgetSettingsModal';
 import { updateWidgetData } from './utils/widget';
 import { Tab, Product, Activity, Warehouse } from './types';
 import { supabase } from './lib/supabase';
+import { createInventoryActivity, listActivities } from './services/activities';
+import { deleteProduct, listAllProducts, syncProductMainImageBySku, upsertProduct } from './services/products';
+import { outboundProduct } from './services/outbound';
+import { buildInventoryAnalytics } from './lib/inventoryMetrics';
 import { Loader2 } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 
@@ -25,10 +29,6 @@ export default function App() {
   // App State
   const [products, setProducts] = useState<Product[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
-  
-  // Dashboard Stats State
-  const [pendingCount, setPendingCount] = useState(0);
-  const [todaySales, setTodaySales] = useState({ amount: 0, count: 0 });
   const [refreshTrigger, setRefreshTrigger] = useState(0); // For child components to refresh data
 
   // Theme State
@@ -181,6 +181,42 @@ export default function App() {
   
   // Warehouse State
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const inventoryAnalytics = buildInventoryAnalytics(products, activities);
+
+  const dataUrlToFile = async (dataUrl: string, fileName: string) => {
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
+    return new File([blob], fileName, { type: blob.type || 'image/jpeg' });
+  };
+
+  const uploadProductImage = async (userId: string, product: Product) => {
+    let file = product.imageFile;
+
+    if (!file && product.imageDataUrl?.startsWith('data:')) {
+      const ext = product.imageDataUrl.match(/^data:image\/(\w+)/)?.[1] || 'jpg';
+      file = await dataUrlToFile(product.imageDataUrl, `${product.sku || 'product'}-${Date.now()}.${ext}`);
+    }
+
+    if (!file) {
+      return product.imageUrl;
+    }
+
+    const ext = file.name.split('.').pop() || 'jpg';
+    const safeSku = (product.sku || 'product').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const path = `${userId}/products/${safeSku}/${Date.now()}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(path, file, { upsert: true });
+
+    if (uploadError) throw uploadError;
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('avatars')
+      .getPublicUrl(path);
+
+    return publicUrl;
+  };
 
   // Fetch Warehouses
   const fetchWarehouses = async () => {
@@ -346,50 +382,40 @@ export default function App() {
         };
       }
 
-      // Map to DB
-      const dbProduct = {
-        id: finalProduct.id,
-        name: finalProduct.name,
-        brand: finalProduct.brand,
-        size: finalProduct.size,
-        sku: finalProduct.sku,
-        price: finalProduct.price,
-        stock: finalProduct.stock,
-        image_url: finalProduct.imageUrl,
-        status: finalProduct.status,
-        location: finalProduct.location,
-        warehouse: finalProduct.warehouse,
-        created_at: new Date().toISOString(),
-        user_id: session?.user.id
+      if (!session?.user?.id) return;
+      const uploadedImageUrl = await uploadProductImage(session.user.id, product);
+
+      finalProduct = {
+        ...finalProduct,
+        imageUrl: uploadedImageUrl || finalProduct.imageUrl || `https://picsum.photos/200/200?random=${Date.now()}`,
+        source: product.source || finalProduct.source || '',
+        imageDataUrl: '',
+        imageFile: undefined,
       };
 
-      const { error } = await supabase
-        .from('products')
-        .upsert(dbProduct);
+      await upsertProduct(finalProduct, session.user.id);
 
-      if (error) throw error;
+      if (uploadedImageUrl) {
+        await syncProductMainImageBySku(session.user.id, finalProduct.sku, uploadedImageUrl);
+      }
 
       // Add Activity Log
       if (!editingProduct || isMerge) {
-         const newActivity = {
-            id: `act-${Date.now()}`,
-            type: 'inbound',
-            product_name: finalProduct.name,
-            time: '刚刚',
-            sku: finalProduct.sku,
-            size: finalProduct.size,
-            price: isMerge ? product.price : finalProduct.price, // Cost price for inbound
-            cost: isMerge ? product.price : finalProduct.price,
-            image_url: finalProduct.imageUrl,
-            created_at: new Date().toISOString(),
-            warehouse: finalProduct.warehouse,
-            count: Number(product.stock), // Force number type
-            user_id: session?.user.id
-         };
-         const { error: insertActError } = await supabase.from('activities').insert(newActivity);
-         if (insertActError) {
-             console.error('Activity Insert Error:', insertActError);
-             // alert('日志记录失败: ' + insertActError.message); // Optional: alert user
+         try {
+           await createInventoryActivity({
+             userId: session.user.id,
+             type: 'inbound',
+             productName: finalProduct.name,
+             sku: finalProduct.sku,
+             size: finalProduct.size,
+             price: isMerge ? product.price : finalProduct.price,
+             cost: isMerge ? product.price : finalProduct.price,
+             imageUrl: finalProduct.imageUrl,
+             warehouse: finalProduct.warehouse,
+             count: Number(product.stock),
+           });
+         } catch (insertActError) {
+           console.error('Activity Insert Error:', insertActError);
          }
       }
 
@@ -401,6 +427,7 @@ export default function App() {
     } catch (error: any) {
       console.error('Error saving product:', error);
       alert(`保存失败: ${error.message || JSON.stringify(error)}`);
+      throw error; // Re-throw so the modal knows save failed
     }
   };
 
@@ -413,13 +440,8 @@ export default function App() {
     if (!confirm('确定要删除该商品吗？')) return;
     
     try {
-      const { error } = await supabase
-        .from('products')
-        .delete()
-        .eq('id', productId)
-        .eq('user_id', session?.user?.id);
-        
-      if (error) throw error;
+      if (!session?.user?.id) return;
+      await deleteProduct(productId, session.user.id);
       
       fetchData();
       setRefreshTrigger(prev => prev + 1);
@@ -431,56 +453,26 @@ export default function App() {
     }
   };
 
-  const handleOutboundProduct = async (product: Product, price: number, platform: string = '得物') => {
+  const handleOutboundProduct = async (product: Product, price: number, quantity: number = 1, platform: string = '得物') => {
     if (!session?.user?.id) return;
     
     try {
-      if (product.stock < 1) {
-        alert('库存不足');
-        return;
-      }
-
-      // 1. Update Product
-      const { error: prodError } = await supabase
-        .from('products')
-        .update({ stock: product.stock - 1 })
-        .eq('id', product.id)
-        .eq('user_id', session.user.id);
-        
-      if (prodError) throw prodError;
-
-      // 2. Create Activity
-      const newActivity = {
-        id: `act-${Date.now()}`,
-        type: 'outbound',
-        product_name: product.name,
-        time: '刚刚',
-        sku: product.sku,
-        size: product.size,
-        price: price, // Sale Price
-        cost: product.price, // Cost Price
-        image_url: product.imageUrl,
-        created_at: new Date().toISOString(),
-        warehouse: product.warehouse,
-        count: 1,
-        platform: platform,
-        user_id: session.user.id
-      };
-      
-      const { error: actError } = await supabase
-        .from('activities')
-        .insert(newActivity);
-        
-      if (actError) throw actError;
+      await outboundProduct({
+        product,
+        userId: session.user.id,
+        salePrice: price,
+        quantity,
+        platform,
+      });
 
       fetchData();
       setRefreshTrigger(prev => prev + 1);
       setShowOutboundModal(false);
-      alert('出库成功');
+      alert(`出库成功 (x${quantity})`);
       
     } catch (error: any) {
       console.error('Outbound error:', error);
-      alert('出库失败');
+      alert(`出库失败: ${error.message || JSON.stringify(error)}`);
     }
   };
 
@@ -489,55 +481,13 @@ export default function App() {
     if (!session?.user?.id) return;
     setIsLoading(true);
     try {
-      const { data: productsData, error: prodError } = await supabase
-        .from('products')
-        .select('*')
-        .eq('user_id', session.user.id);
-      
-      if (prodError) throw prodError;
-
-      const { data: activitiesData, error: actError } = await supabase
-        .from('activities')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .order('created_at', { ascending: false });
-
-      if (actError) throw actError;
-
-      // Ensure count is number
-      const typedActivities = (activitiesData || []).map(a => ({
-        ...a,
-        count: a.count ? Number(a.count) : 1, // Fallback to 1 if count is null/0/undefined
-        price: Number(a.price),
-        cost: Number(a.cost),
-        createdAt: a.created_at || a.createdAt // Unify date field
-      }));
+      const [productsData, typedActivities] = await Promise.all([
+        listAllProducts(session.user.id),
+        listActivities(session.user.id),
+      ]);
 
       setProducts(productsData || []);
       setActivities(typedActivities || []);
-
-      // Calculate Dashboard Stats
-      const pending = typedActivities.filter(a => a.type === 'pending').length;
-      setPendingCount(pending);
-
-      const today = new Date().toISOString().split('T')[0];
-      const todaySalesData = typedActivities.filter(a => a.type === 'outbound' && a.created_at.startsWith(today));
-      setTodaySales({
-        amount: todaySalesData.reduce((sum, a) => sum + (a.price || 0), 0),
-        count: todaySalesData.length
-      });
-
-      // Update Widget Data
-      const currentTotalStock = (productsData || []).reduce((sum, p) => sum + (p.status === 'instock' ? p.stock : 0), 0);
-      const currentTodayInbound = (typedActivities || [])
-        .filter(a => a.type === 'inbound' && (a.created_at || a.createdAt || '').startsWith(today))
-        .reduce((sum, a) => sum + (a.count || 1), 0);
-        
-      updateWidgetData({
-        totalStock: currentTotalStock,
-        inboundToday: currentTodayInbound,
-        lastUpdated: new Date().toLocaleTimeString()
-      });
 
     } catch (error) {
       console.error('Fetch data error:', error);
@@ -556,6 +506,21 @@ export default function App() {
       }
     }
   }, [showWelcome, session]);
+
+  useEffect(() => {
+    if (!session || showWelcome) return;
+
+    updateWidgetData({
+      totalStock: inventoryAnalytics.dashboard.totalStock,
+      inboundToday: inventoryAnalytics.dashboard.todayInboundCount,
+      lastUpdated: new Date().toLocaleTimeString(),
+    });
+  }, [
+    inventoryAnalytics.dashboard.todayInboundCount,
+    inventoryAnalytics.dashboard.totalStock,
+    session,
+    showWelcome,
+  ]);
 
   const handleWelcomeComplete = () => {
     setShowWelcome(false);
@@ -594,11 +559,11 @@ export default function App() {
             onOutboundClick={() => setShowOutboundModal(true)}
             onPendingClick={() => setShowPendingModal(true)}
             activities={activities}
-            pendingOrderCount={pendingCount} // Pass real data
-            todaySalesAmount={todaySales.amount} // Pass real data
-            todaySalesCount={todaySales.count} // Pass real data
+            pendingOrderCount={inventoryAnalytics.dashboard.pendingOrderCount}
+            todaySalesAmount={inventoryAnalytics.dashboard.todaySalesAmount}
+            todaySalesCount={inventoryAnalytics.dashboard.todaySalesCount}
             onAvatarClick={() => setCurrentTab(Tab.ME)}
-            products={products} // Pass products for inventory stats
+            products={products}
             onAIManageExecuted={() => {
               fetchData();
               setRefreshTrigger(prev => prev + 1);
@@ -608,6 +573,7 @@ export default function App() {
       case Tab.PRODUCTS:
         return (
           <ProductList 
+            userId={session.user.id}
             onAddClick={() => {
               setEditingProduct(null);
               setShowAddModal(true);
@@ -624,26 +590,15 @@ export default function App() {
         return <Stats products={products} activities={activities} />;
       case Tab.ME:
         // Calculate Stats for Profile
-        const totalStock = products.reduce((sum, p) => sum + (p.status === 'instock' ? p.stock : 0), 0);
-        
-        // Use the 'count' field if available (for new data), otherwise 1 (for legacy)
-        const totalInbound = activities
-            .filter(a => a.type === 'inbound')
-            .reduce((sum, a) => sum + (a.count || 1), 0);
-            
-        const totalOutbound = activities
-            .filter(a => a.type === 'outbound')
-            .length; // Outbound is always 1 per activity currently (logic in handleOutboundProduct)
-
         return (
           <Profile 
             username={userProfile.name}
             avatarUrl={userProfile.avatar}
             onUpdateName={(name) => updateProfile({ name })}
             onUpdateAvatar={(file) => updateProfile({ avatarFile: file })}
-            totalStock={totalStock}
-            totalInbound={totalInbound}
-            totalOutbound={totalOutbound}
+            totalStock={inventoryAnalytics.dashboard.totalStock}
+            totalInbound={inventoryAnalytics.lifetime.totalInboundCount}
+            totalOutbound={inventoryAnalytics.lifetime.totalOutboundCount}
             isDarkMode={isDarkMode}
             onToggleTheme={() => setIsDarkMode(!isDarkMode)}
             onLogout={handleLogout}
@@ -659,9 +614,9 @@ export default function App() {
             onOutboundClick={() => setShowOutboundModal(true)}
             onPendingClick={() => setShowPendingModal(true)}
             activities={activities}
-            pendingOrderCount={pendingCount}
-            todaySalesAmount={todaySales.amount}
-            todaySalesCount={todaySales.count}
+            pendingOrderCount={inventoryAnalytics.dashboard.pendingOrderCount}
+            todaySalesAmount={inventoryAnalytics.dashboard.todaySalesAmount}
+            todaySalesCount={inventoryAnalytics.dashboard.todaySalesCount}
             onAvatarClick={() => setCurrentTab(Tab.ME)}
             products={products}
             onAIManageExecuted={() => {
@@ -700,6 +655,7 @@ export default function App() {
               onDelete={handleDeleteProduct}
               initialData={editingProduct}
               warehouses={warehouses}
+              existingProducts={products}
             />
             <OutboundModal
               isOpen={showOutboundModal}
@@ -715,10 +671,8 @@ export default function App() {
             <WidgetSettingsModal
               isOpen={showWidgetModal}
               onClose={() => setShowWidgetModal(false)}
-              totalStock={products.reduce((sum, p) => sum + (p.status === 'instock' ? p.stock : 0), 0)}
-              todayInbound={activities
-                .filter(a => a.type === 'inbound' && (a.created_at || a.createdAt || '').startsWith(new Date().toISOString().split('T')[0]))
-                .reduce((sum, a) => sum + (a.count || 1), 0)}
+              totalStock={inventoryAnalytics.dashboard.totalStock}
+              todayInbound={inventoryAnalytics.dashboard.todayInboundCount}
             />
           </>
         )}

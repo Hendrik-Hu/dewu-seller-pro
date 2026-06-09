@@ -1,13 +1,15 @@
 {
-  "name": "copy-of-dewu-seller-pro",
+  "name": "dewu-seller-pro",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node ./node_modules/vite/bin/vite.js",
     "dev:agent": "node --env-file=.env.local local-agent-server.mjs",
-    "build": "vite build",
-    "preview": "vite preview"
+    "build": "node ./node_modules/vite/bin/vite.js build",
+    "preview": "node ./node_modules/vite/bin/vite.js preview",
+    "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
+    "android:sync": "node ./node_modules/vite/bin/vite.js build && node ./node_modules/@capacitor/cli/bin/capacitor sync android"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.1",
