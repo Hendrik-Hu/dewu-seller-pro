@@ -14,7 +14,7 @@ import { updateWidgetData } from './utils/widget';
 import { Tab, Product, Activity, Warehouse } from './types';
 import { supabase } from './lib/supabase';
 import { createInventoryActivity, listActivities } from './services/activities';
-import { deleteProduct, listAllProducts, syncProductMainImageBySku, upsertProduct } from './services/products';
+import { batchUpdateProductStatus, deleteProduct, listAllProducts, syncProductMainImageBySku, upsertProduct } from './services/products';
 import { outboundProduct } from './services/outbound';
 import { buildInventoryAnalytics } from './lib/inventoryMetrics';
 import { Loader2 } from 'lucide-react';
@@ -453,6 +453,68 @@ export default function App() {
     }
   };
 
+  const handleAddWarehouse = async (name: string) => {
+    const trimmedName = name.trim();
+    if (!trimmedName || !session?.user?.id) return;
+
+    if (warehouses.length >= 6) {
+      throw new Error('最多允许设置 6 个仓库');
+    }
+
+    if (warehouses.some((warehouse) => warehouse.name === trimmedName)) {
+      throw new Error('仓库名称已存在');
+    }
+
+    const { data, error } = await supabase
+      .from('warehouses')
+      .insert({
+        name: trimmedName,
+        user_id: session.user.id,
+        created_at: new Date().toISOString(),
+        is_default: false,
+      })
+      .select('id, name, is_default')
+      .single();
+
+    if (error) throw error;
+
+    if (data) {
+      setWarehouses((prev) => [...prev, data]);
+    }
+  };
+
+  const handleBatchDeleteProducts = async (productIds: string[]) => {
+    if (!session?.user?.id || productIds.length === 0) return;
+
+    try {
+      await Promise.all(productIds.map((productId) => deleteProduct(productId, session.user.id)));
+      fetchData();
+      setRefreshTrigger(prev => prev + 1);
+      setShowAddModal(false);
+      setEditingProduct(null);
+      alert(`已删除 ${productIds.length} 个商品`);
+    } catch (error: any) {
+      console.error('Batch delete error:', error);
+      alert(`批量删除失败: ${error.message || '请稍后重试'}`);
+      throw error;
+    }
+  };
+
+  const handleCompletePendingProducts = async (productIds: string[]) => {
+    if (!session?.user?.id || productIds.length === 0) return;
+
+    try {
+      await batchUpdateProductStatus(productIds, session.user.id, 'sold');
+      fetchData();
+      setRefreshTrigger(prev => prev + 1);
+      alert(`已完成 ${productIds.length} 个待发货商品`);
+    } catch (error: any) {
+      console.error('Complete pending error:', error);
+      alert(`操作失败: ${error.message || '请稍后重试'}`);
+      throw error;
+    }
+  };
+
   const handleOutboundProduct = async (product: Product, price: number, quantity: number = 1, platform: string = '得物') => {
     if (!session?.user?.id) return;
     
@@ -564,6 +626,7 @@ export default function App() {
             todaySalesCount={inventoryAnalytics.dashboard.todaySalesCount}
             onAvatarClick={() => setCurrentTab(Tab.ME)}
             products={products}
+            warehouses={warehouses}
             onAIManageExecuted={() => {
               fetchData();
               setRefreshTrigger(prev => prev + 1);
@@ -580,9 +643,11 @@ export default function App() {
             }}
             onEditProduct={handleEditClick}
             onDeleteProduct={handleDeleteProduct}
+            onBatchDeleteProducts={handleBatchDeleteProducts}
             warehouses={warehouses}
             onRenameWarehouse={handleRenameWarehouse}
             onSetDefaultWarehouse={handleSetDefaultWarehouse}
+            onAddWarehouse={handleAddWarehouse}
             refreshTrigger={refreshTrigger}
           />
         );
@@ -619,6 +684,7 @@ export default function App() {
             todaySalesCount={inventoryAnalytics.dashboard.todaySalesCount}
             onAvatarClick={() => setCurrentTab(Tab.ME)}
             products={products}
+            warehouses={warehouses}
             onAIManageExecuted={() => {
               fetchData();
               setRefreshTrigger(prev => prev + 1);
@@ -667,6 +733,7 @@ export default function App() {
               isOpen={showPendingModal}
               onClose={() => setShowPendingModal(false)}
               products={products}
+              onCompletePending={handleCompletePendingProducts}
             />
             <WidgetSettingsModal
               isOpen={showWidgetModal}

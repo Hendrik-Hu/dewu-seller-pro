@@ -1,18 +1,83 @@
-import React from 'react';
-import { X, Truck, PackageCheck } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { X, Truck, PackageCheck, Search, CheckCircle2, Circle, Check } from 'lucide-react';
 import { Product } from '../types';
 
 interface PendingOrdersModalProps {
   isOpen: boolean;
   onClose: () => void;
   products: Product[];
+  onCompletePending: (productIds: string[]) => Promise<void>;
 }
 
-export const PendingOrdersModal: React.FC<PendingOrdersModalProps> = ({ isOpen, onClose, products }) => {
-  if (!isOpen) return null;
+export const PendingOrdersModal: React.FC<PendingOrdersModalProps> = ({ isOpen, onClose, products, onCompletePending }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Filter for items that are marked as 'shipping'
-  const pendingProducts = products.filter(p => p.status === 'shipping');
+  useEffect(() => {
+    if (!isOpen) return;
+    setSearchTerm('');
+    setSelectedIds([]);
+    setIsSubmitting(false);
+  }, [isOpen]);
+
+  const pendingProducts = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    return products.filter((product) => {
+      if (product.status !== 'shipping') return false;
+      if (!q) return true;
+      return [
+        product.name,
+        product.sku,
+        product.brand,
+        product.size,
+        product.warehouse,
+        product.location,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(q));
+    });
+  }, [products, searchTerm]);
+
+  const allVisibleSelected = pendingProducts.length > 0 && pendingProducts.every((product) => selectedIds.includes(product.id));
+
+  const toggleSelection = (productId: string) => {
+    setSelectedIds((prev) => (
+      prev.includes(productId)
+        ? prev.filter((id) => id !== productId)
+        : [...prev, productId]
+    ));
+  };
+
+  const handleToggleSelectAll = () => {
+    if (allVisibleSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !pendingProducts.some((product) => product.id === id)));
+      return;
+    }
+
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      pendingProducts.forEach((product) => next.add(product.id));
+      return Array.from(next);
+    });
+  };
+
+  const handleComplete = async (productIds: string[]) => {
+    if (productIds.length === 0) return;
+
+    const confirmed = window.confirm(`确认将 ${productIds.length} 个待发货商品标记为已处理吗？`);
+    if (!confirmed) return;
+
+    setIsSubmitting(true);
+    try {
+      await onCompletePending(productIds);
+      setSelectedIds((prev) => prev.filter((id) => !productIds.includes(id)));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-[fadeIn_0.2s_ease-out]">
@@ -29,6 +94,31 @@ export const PendingOrdersModal: React.FC<PendingOrdersModalProps> = ({ isOpen, 
             <X size={20} />
           </button>
         </div>
+
+        <div className="p-3 border-b border-slate-100 bg-slate-50 space-y-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="搜索货号、名称、品牌、尺码..."
+              className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-dewu-500"
+            />
+          </div>
+
+          {pendingProducts.length > 0 && (
+            <div className="flex items-center justify-between">
+              <div className="text-[11px] text-slate-500">当前待处理 {pendingProducts.length} 个，已选 {selectedIds.length} 个</div>
+              <button
+                onClick={handleToggleSelectAll}
+                className="text-[11px] font-medium text-dewu-600"
+              >
+                {allVisibleSelected ? '取消全选' : '全选当前结果'}
+              </button>
+            </div>
+          )}
+        </div>
         
         <div className="overflow-y-auto p-4 space-y-3 min-h-[200px]">
           {pendingProducts.length === 0 ? (
@@ -39,8 +129,20 @@ export const PendingOrdersModal: React.FC<PendingOrdersModalProps> = ({ isOpen, 
              </div>
           ) : (
             pendingProducts.map(product => (
-              <div key={product.id} className="flex items-center space-x-3 bg-white p-3 rounded-xl border border-slate-100 shadow-sm relative overflow-hidden">
+              <button
+                key={product.id}
+                type="button"
+                onClick={() => toggleSelection(product.id)}
+                className="w-full flex items-center space-x-3 bg-white p-3 rounded-xl border border-slate-100 shadow-sm relative overflow-hidden text-left"
+              >
                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-orange-400"></div>
+                <div className="shrink-0 text-dewu-500">
+                  {selectedIds.includes(product.id) ? (
+                    <CheckCircle2 size={18} fill="currentColor" />
+                  ) : (
+                    <Circle size={18} className="text-slate-300" />
+                  )}
+                </div>
                 <img src={product.imageUrl} alt={product.name} className="w-16 h-16 rounded-lg object-cover bg-slate-100" />
                 <div className="flex-1 min-w-0">
                   <h4 className="text-xs font-bold text-slate-900 line-clamp-2">{product.name}</h4>
@@ -48,22 +150,38 @@ export const PendingOrdersModal: React.FC<PendingOrdersModalProps> = ({ isOpen, 
                      <span className="bg-slate-100 text-slate-500 text-[10px] px-1.5 py-0.5 rounded">{product.size}码</span>
                      <span className="text-[10px] text-slate-400">货号: {product.sku}</span>
                   </div>
+                  <div className="mt-1 text-[10px] text-slate-400">
+                    {product.warehouse || '未设置仓库'}{product.location ? ` · ${product.location}` : ''}
+                  </div>
                   <div className="flex justify-between items-center mt-2">
                      <p className="text-sm font-bold text-slate-900">¥{product.price}</p>
-                     <button className="text-[10px] bg-orange-50 text-orange-600 px-2 py-1 rounded-full font-medium border border-orange-100">
-                        打印面单
+                     <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleComplete([product.id]);
+                        }}
+                        disabled={isSubmitting}
+                        className="text-[10px] bg-orange-50 text-orange-600 px-2 py-1 rounded-full font-medium border border-orange-100 disabled:opacity-50"
+                     >
+                        标记已处理
                      </button>
                   </div>
                 </div>
-              </div>
+              </button>
             ))
           )}
         </div>
         
         {pendingProducts.length > 0 && (
           <div className="p-4 border-t border-slate-100 bg-slate-50">
-             <button className="w-full bg-slate-900 text-white font-medium py-3 rounded-xl shadow-lg shadow-slate-200 active:scale-95 transition-all">
-                批量发货 ({pendingProducts.length})
+             <button
+                onClick={() => handleComplete(selectedIds)}
+                disabled={selectedIds.length === 0 || isSubmitting}
+                className="w-full bg-slate-900 text-white font-medium py-3 rounded-xl shadow-lg shadow-slate-200 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+             >
+                <Check size={16} />
+                {isSubmitting ? '处理中...' : `批量完成 (${selectedIds.length})`}
              </button>
           </div>
         )}

@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Search, Plus, Boxes, CircleDollarSign, Warehouse as WarehouseIcon, ChevronDown, ChevronLeft, ChevronRight, Check, MapPin, Trash2, Edit, X, Loader2, Star } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { Search, Plus, Boxes, CircleDollarSign, Warehouse as WarehouseIcon, ChevronDown, ChevronLeft, ChevronRight, Check, MapPin, Trash2, Edit, X, Loader2, Star, CheckCircle2, Circle } from 'lucide-react';
 import { Product, Warehouse } from '../types';
 import { supabase } from '../lib/supabase';
 import { listProducts } from '../services/products';
@@ -9,15 +9,37 @@ interface ProductListProps {
   onAddClick: () => void;
   onEditProduct: (product: Product) => void;
   onDeleteProduct: (productId: string) => void;
+  onBatchDeleteProducts: (productIds: string[]) => Promise<void>;
   warehouses: Warehouse[];
   onRenameWarehouse: (id: string, oldName: string, newName: string) => void;
   onSetDefaultWarehouse: (id: string) => void;
+  onAddWarehouse: (name: string) => Promise<void>;
   refreshTrigger: number;
 }
 
 const ITEMS_PER_PAGE = 50;
 
-export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, onEditProduct, onDeleteProduct, warehouses, onRenameWarehouse, onSetDefaultWarehouse, refreshTrigger }) => {
+interface AggregatedSizeRow {
+  key: string;
+  size: string;
+  stock: number;
+  averageCost: number;
+  sourceCount: number;
+  primaryProduct: Product;
+}
+
+interface AggregatedProductGroup {
+  key: string;
+  sku: string;
+  name: string;
+  brand: string;
+  imageUrl: string;
+  totalStock: number;
+  sizeRows: AggregatedSizeRow[];
+}
+
+export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, onEditProduct, onDeleteProduct, onBatchDeleteProducts, warehouses, onRenameWarehouse, onSetDefaultWarehouse, onAddWarehouse, refreshTrigger }) => {
+  const MAX_WAREHOUSES = 6;
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
@@ -34,8 +56,14 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
   const [showWarehouseMenu, setShowWarehouseMenu] = useState(false);
   const [editingWarehouse, setEditingWarehouse] = useState<string | null>(null);
   const [newWarehouseName, setNewWarehouseName] = useState('');
+  const [addingWarehouseName, setAddingWarehouseName] = useState('');
+  const [showAddWarehouseForm, setShowAddWarehouseForm] = useState(false);
+  const [isAddingWarehouse, setIsAddingWarehouse] = useState(false);
   
   const [activeProductId, setActiveProductId] = useState<string | null>(null);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [isBatchDeleting, setIsBatchDeleting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
   // Update current warehouse if default changes or initial load
@@ -102,6 +130,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
   const isLongPress = useRef(false);
 
   const handleTouchStart = (product: Product) => {
+    if (isSelectionMode) return;
     if (activeProductId === product.id) return;
 
     isLongPress.current = false;
@@ -120,9 +149,48 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
     }
   };
 
+  const resetSelectionMode = () => {
+    setIsSelectionMode(false);
+    setSelectedProductIds([]);
+  };
+
+  const enterSelectionMode = (productId: string) => {
+    setIsSelectionMode(true);
+    setSelectedProductIds([productId]);
+    setActiveProductId(null);
+  };
+
+  const toggleProductSelection = (productId: string) => {
+    setSelectedProductIds((prev) =>
+      prev.includes(productId)
+        ? prev.filter((id) => id !== productId)
+        : [...prev, productId]
+    );
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedProductIds.length === 0) {
+      alert('请先勾选要删除的商品');
+      return;
+    }
+
+    const confirmed = window.confirm(`确定要批量删除已勾选的 ${selectedProductIds.length} 个商品吗？`);
+    if (!confirmed) return;
+
+    setIsBatchDeleting(true);
+    try {
+      await onBatchDeleteProducts(selectedProductIds);
+      resetSelectionMode();
+    } finally {
+      setIsBatchDeleting(false);
+    }
+  };
+
   const handleWarehouseSelect = (name: string) => {
     setCurrentWarehouse(name);
     setShowWarehouseMenu(false);
+    setShowAddWarehouseForm(false);
+    setAddingWarehouseName('');
     setCurrentPage(1); // Reset page on warehouse change
   };
 
@@ -143,46 +211,235 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
     setEditingWarehouse(null);
   };
 
-  // Stats Calculation (Based on CURRENT PAGE data - or should we fetch aggregates?)
-  // For "Total Stock" and "Total Value" in the header, usually users expect TOTAL for the warehouse, not just current page.
-  // However, calculating total value for ALL items requires a separate aggregation query if we don't have all items.
-  // For now, to keep it fast and simple in this refactor, we might hide it or accept it's current page stats?
-  // User wants "Complete System". Real backend systems fetch aggregates separately.
-  // Let's Add a separate effect to fetch Warehouse Stats if needed.
-  // For now, let's use the totalCount for "Product Count" (which we have).
-  // For "Total Value", it's harder without a sum query. 
-  // I will implement a quick aggregation query for the current warehouse.
+  const handleAddWarehouse = async (e: React.MouseEvent | React.FormEvent) => {
+    e.stopPropagation();
+    const trimmedName = addingWarehouseName.trim();
+    if (!trimmedName || isAddingWarehouse) return;
 
-  const [warehouseStats, setWarehouseStats] = useState({ count: 0, value: 0 });
+    if (warehouses.length >= MAX_WAREHOUSES) {
+      alert(`最多允许设置 ${MAX_WAREHOUSES} 个仓库`);
+      return;
+    }
+
+    if (warehouses.some((warehouse) => warehouse.name === trimmedName)) {
+      alert('该仓库名称已存在');
+      return;
+    }
+
+    setIsAddingWarehouse(true);
+    try {
+      await onAddWarehouse(trimmedName);
+      setAddingWarehouseName('');
+      setShowAddWarehouseForm(false);
+      setCurrentWarehouse(trimmedName);
+      setCurrentPage(1);
+      setShowWarehouseMenu(false);
+    } catch (error: any) {
+      alert(`新增仓库失败：${error?.message || '请稍后重试'}`);
+    } finally {
+      setIsAddingWarehouse(false);
+    }
+  };
+
+  const [inventoryStats, setInventoryStats] = useState({
+    totalCount: 0,
+    totalValue: 0,
+    warehouseCount: 0,
+    warehouseValue: 0,
+  });
 
   useEffect(() => {
     const fetchStats = async () => {
         if (!userId || !currentWarehouse) return;
 
-        // Fetch aggregation for current warehouse
-        // Since we can't easily do SUM via standard client without fetch all, we might skip Value or estimate it.
-        // Or we fetch all fields 'price,stock' for this warehouse to calculate.
-        // If data is < 10000, fetching just price/stock columns is cheap.
         const { data } = await supabase
             .from('products')
-            .select('price, stock, status')
+            .select('price, stock, warehouse')
             .eq('user_id', userId)
-            .eq('warehouse', currentWarehouse)
             .eq('status', 'instock');
         
         if (data) {
-            const totalStock = data.reduce((acc, curr) => acc + curr.stock, 0);
-            const totalValue = data.reduce((acc, curr) => acc + (curr.price * curr.stock), 0);
-            setWarehouseStats({ count: totalStock, value: totalValue });
+            const totals = data.reduce((acc, curr) => {
+              const stock = Number(curr.stock) || 0;
+              const price = Number(curr.price) || 0;
+              const value = price * stock;
+
+              acc.totalCount += stock;
+              acc.totalValue += value;
+
+              if (curr.warehouse === currentWarehouse) {
+                acc.warehouseCount += stock;
+                acc.warehouseValue += value;
+              }
+
+              return acc;
+            }, {
+              totalCount: 0,
+              totalValue: 0,
+              warehouseCount: 0,
+              warehouseValue: 0,
+            });
+
+            setInventoryStats(totals);
+        } else {
+            setInventoryStats({
+              totalCount: 0,
+              totalValue: 0,
+              warehouseCount: 0,
+              warehouseValue: 0,
+            });
         }
     };
     fetchStats();
   }, [userId, currentWarehouse, refreshTrigger]);
 
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+  const selectedOnPageCount = products.filter((product) => selectedProductIds.includes(product.id)).length;
+  const allVisibleSelected = products.length > 0 && selectedOnPageCount === products.length;
+  const isSearchGroupingMode = searchQuery.trim().length > 0 && !isSelectionMode;
+  const canAddMoreWarehouses = warehouses.length < MAX_WAREHOUSES;
+
+  const aggregatedSearchResults = useMemo<AggregatedProductGroup[]>(() => {
+    if (!isSearchGroupingMode) return [];
+
+    const groups = new Map<string, {
+      key: string;
+      sku: string;
+      name: string;
+      brand: string;
+      imageUrl: string;
+      totalStock: number;
+      sizeMap: Map<string, {
+        stock: number;
+        totalCostValue: number;
+        priceSamples: number[];
+        sourceCount: number;
+        primaryProduct: Product;
+      }>;
+    }>();
+
+    products.forEach((product) => {
+      const normalizedSku = (product.sku || '').trim().toUpperCase();
+      const groupKey = normalizedSku || `${product.brand}__${product.name}`;
+      const sizeKey = (product.size || '均码').trim() || '均码';
+
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, {
+          key: groupKey,
+          sku: normalizedSku,
+          name: product.name,
+          brand: product.brand,
+          imageUrl: product.imageUrl,
+          totalStock: 0,
+          sizeMap: new Map(),
+        });
+      }
+
+      const group = groups.get(groupKey)!;
+      group.totalStock += Number(product.stock) || 0;
+
+      if (!group.sizeMap.has(sizeKey)) {
+        group.sizeMap.set(sizeKey, {
+          stock: 0,
+          totalCostValue: 0,
+          priceSamples: [],
+          sourceCount: 0,
+          primaryProduct: product,
+        });
+      }
+
+      const sizeRow = group.sizeMap.get(sizeKey)!;
+      const stock = Number(product.stock) || 0;
+      const price = Number(product.price) || 0;
+
+      sizeRow.stock += stock;
+      sizeRow.totalCostValue += price * stock;
+      sizeRow.priceSamples.push(price);
+      sizeRow.sourceCount += 1;
+    });
+
+    const parseSizeForSort = (value: string) => {
+      const numeric = Number.parseFloat(value);
+      return Number.isFinite(numeric) ? numeric : Number.MAX_SAFE_INTEGER;
+    };
+
+    return Array.from(groups.values()).map((group) => ({
+      key: group.key,
+      sku: group.sku,
+      name: group.name,
+      brand: group.brand,
+      imageUrl: group.imageUrl,
+      totalStock: group.totalStock,
+      sizeRows: Array.from(group.sizeMap.entries())
+        .map(([size, row]) => {
+          const averageCost = row.stock > 0
+            ? row.totalCostValue / row.stock
+            : (row.priceSamples.reduce((sum, price) => sum + price, 0) / Math.max(row.priceSamples.length, 1));
+
+          return {
+            key: `${group.key}__${size}`,
+            size,
+            stock: row.stock,
+            averageCost,
+            sourceCount: row.sourceCount,
+            primaryProduct: row.primaryProduct,
+          };
+        })
+        .sort((a, b) => {
+          const sizeDiff = parseSizeForSort(a.size) - parseSizeForSort(b.size);
+          return sizeDiff !== 0 ? sizeDiff : a.size.localeCompare(b.size, 'zh-CN');
+        }),
+    }));
+  }, [products, isSearchGroupingMode]);
+
+  const aggregatedSearchStockCount = useMemo(
+    () => aggregatedSearchResults.reduce((sum, group) => sum + group.totalStock, 0),
+    [aggregatedSearchResults],
+  );
+
+  const formatCost = (value: number) => {
+    const rounded = Number(value.toFixed(2));
+    return Number.isInteger(rounded) ? `${rounded}` : rounded.toFixed(2);
+  };
+
+  const formatCompactCurrency = (value: number) => {
+    if (value >= 10000) {
+      const wan = value / 10000;
+      const digits = wan >= 10 ? 0 : 1;
+      return `¥${wan.toFixed(digits)}w`;
+    }
+
+    return `¥${Math.round(value)}`;
+  };
+
+  useEffect(() => {
+    setSelectedProductIds((prev) => prev.filter((id) => products.some((product) => product.id === id)));
+  }, [products]);
+
+  const handleToggleSelectAllVisible = () => {
+    if (products.length === 0) return;
+
+    if (allVisibleSelected) {
+      setSelectedProductIds((prev) => prev.filter((id) => !products.some((product) => product.id === id)));
+      return;
+    }
+
+    setSelectedProductIds((prev) => {
+      const merged = new Set(prev);
+      products.forEach((product) => merged.add(product.id));
+      return Array.from(merged);
+    });
+  };
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 dark:bg-black relative transition-colors duration-300" onClick={() => setActiveProductId(null)}>
+    <div
+      className="flex flex-col h-full bg-slate-50 dark:bg-black relative transition-colors duration-300"
+      onClick={() => {
+        if (!isSelectionMode) {
+          setActiveProductId(null);
+        }
+      }}
+    >
       {/* Sticky Header */}
       <div className="sticky top-0 z-30 bg-slate-50 dark:bg-black px-5 pt-4 pb-2 shadow-sm transition-colors duration-300" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-4">
@@ -203,68 +460,129 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                   <div className="fixed inset-0 z-10" onClick={() => {
                       setShowWarehouseMenu(false);
                       setEditingWarehouse(null);
+                      setShowAddWarehouseForm(false);
+                      setAddingWarehouseName('');
                   }}></div>
-                  <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-zinc-900 rounded-xl shadow-xl border border-slate-100 dark:border-zinc-800 z-20 py-2 animate-[fadeIn_0.1s_ease-out] max-h-60 overflow-y-auto">
-                    <div className="px-4 py-2 text-[10px] text-slate-400 dark:text-zinc-500 font-medium border-b border-slate-50 dark:border-zinc-800 mb-1 sticky top-0 bg-white dark:bg-zinc-900 z-10">
-                        点击名称切换，点击右侧图标修改
-                    </div>
+                  <div className="absolute right-0 top-full mt-2 w-52 bg-white dark:bg-zinc-900 rounded-xl shadow-xl border border-slate-100 dark:border-zinc-800 z-20 py-1.5 animate-[fadeIn_0.1s_ease-out] max-h-72 overflow-y-auto">
                     {warehouses.map(wh => (
                       <div 
                         key={wh.id}
                         className="relative group"
                       >
                         {editingWarehouse === wh.name ? (
-                            <div className="px-2 py-1.5 flex items-center space-x-2 bg-slate-50 dark:bg-zinc-800">
+                            <div className="px-1.5 py-1 flex items-center space-x-1.5 bg-slate-50 dark:bg-zinc-800">
                                 <input 
                                     type="text" 
                                     value={newWarehouseName}
                                     onChange={(e) => setNewWarehouseName(e.target.value)}
-                                    className="flex-1 min-w-0 text-xs px-2 py-1 rounded border border-slate-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white focus:border-dewu-500 outline-none"
+                                    className="flex-1 min-w-0 text-[11px] px-2 py-1 rounded-md border border-slate-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white focus:border-dewu-500 outline-none"
                                     autoFocus
                                     onClick={(e) => e.stopPropagation()}
                                 />
                                 <button 
                                     onClick={(e) => saveWarehouseName(e, wh)}
-                                    className="p-1 bg-dewu-500 text-white rounded hover:bg-dewu-600"
+                                    className="flex h-6 w-6 items-center justify-center rounded-md bg-dewu-500 text-white hover:bg-dewu-600"
                                 >
-                                    <Check size={12} />
+                                    <Check size={10} />
                                 </button>
                             </div>
                         ) : (
                             <button 
                                 onClick={() => handleWarehouseSelect(wh.name)}
-                                className="w-full text-left px-4 py-2.5 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800 flex items-center justify-between group"
+                                className="w-full text-left px-3 py-1.5 text-[11px] font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800 flex items-center justify-between group"
                             >
-                                <span>{wh.name}</span>
-                                <div className="flex items-center space-x-2">
-                                    {currentWarehouse === wh.name && <Check size={12} className="text-dewu-500 dark:text-dewu-400" />}
+                                <span className="truncate pr-2">{wh.name}</span>
+                                <div className="flex items-center space-x-1">
+                                    {currentWarehouse === wh.name && <Check size={10} className="text-dewu-500 dark:text-dewu-400" />}
                                     
                                     <button 
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             onSetDefaultWarehouse(wh.id);
                                         }}
-                                        className={`p-1 rounded transition-colors ${
+                                        className={`p-0.5 rounded transition-colors ${
                                             wh.is_default 
                                                 ? 'text-yellow-500 hover:text-yellow-600' 
                                                 : 'text-slate-300 hover:text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/20'
                                         }`}
                                         title={wh.is_default ? "当前默认仓库" : "设为默认仓库"}
                                     >
-                                        <Star size={12} fill={wh.is_default ? "currentColor" : "none"} />
+                                        <Star size={10} fill={wh.is_default ? "currentColor" : "none"} />
                                     </button>
 
                                     <div 
                                         onClick={(e) => startEditingWarehouse(e, wh.name)}
-                                        className="p-1 text-slate-300 hover:text-slate-600 dark:hover:text-zinc-400 hover:bg-slate-200 dark:hover:bg-zinc-700 rounded transition-colors"
+                                        className="p-0.5 text-slate-300 hover:text-slate-600 dark:hover:text-zinc-400 hover:bg-slate-200 dark:hover:bg-zinc-700 rounded transition-colors"
                                     >
-                                        <Edit size={12} />
+                                        <Edit size={10} />
                                     </div>
                                 </div>
                             </button>
                         )}
                       </div>
                     ))}
+                    <div className="mt-1 border-t border-slate-100 dark:border-zinc-800 px-2 pt-2">
+                      {showAddWarehouseForm ? (
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            value={addingWarehouseName}
+                            onChange={(e) => setAddingWarehouseName(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                handleAddWarehouse(e);
+                              }
+                              if (e.key === 'Escape') {
+                                e.stopPropagation();
+                                setShowAddWarehouseForm(false);
+                                setAddingWarehouseName('');
+                              }
+                            }}
+                            placeholder="输入仓库名称"
+                            className="flex-1 min-w-0 text-xs px-2.5 py-2 rounded-lg border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 dark:text-white focus:border-dewu-500 outline-none"
+                            autoFocus
+                          />
+                          <button
+                            onClick={handleAddWarehouse}
+                            disabled={!addingWarehouseName.trim() || isAddingWarehouse}
+                            className="shrink-0 h-8 w-8 rounded-lg bg-slate-900 dark:bg-dewu-500 text-white flex items-center justify-center disabled:opacity-50"
+                            title={isAddingWarehouse ? '添加中' : '确认添加'}
+                          >
+                            {isAddingWarehouse ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowAddWarehouseForm(false);
+                              setAddingWarehouseName('');
+                            }}
+                            className="shrink-0 h-8 w-8 rounded-lg border border-slate-200 dark:border-zinc-700 text-slate-500 dark:text-zinc-400 flex items-center justify-center"
+                            title="取消"
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!canAddMoreWarehouses) return;
+                              setShowAddWarehouseForm(true);
+                            }}
+                            disabled={!canAddMoreWarehouses}
+                            className="flex h-8 w-8 items-center justify-center rounded-full border border-dashed border-slate-300 bg-slate-50 text-slate-500 transition-colors hover:border-dewu-400 hover:text-dewu-500 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:border-dewu-500 dark:hover:text-dewu-400"
+                            title={canAddMoreWarehouses ? '新增仓库' : `最多允许设置 ${MAX_WAREHOUSES} 个仓库`}
+                          >
+                            <Plus size={14} />
+                          </button>
+                          {!canAddMoreWarehouses && (
+                            <p className="text-[10px] text-slate-400 dark:text-zinc-500">最多 6 个仓库</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </>
               )}
@@ -272,21 +590,60 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
         </div>
         
         {/* Inventory Overview */}
-        <div className="bg-slate-900 dark:bg-zinc-900 rounded-2xl p-4 text-white shadow-xl shadow-slate-200 dark:shadow-none mb-4 grid grid-cols-2 divide-x divide-slate-700 dark:divide-zinc-700">
-           <div className="pr-4">
-              <div className="flex items-center space-x-1.5 mb-2 opacity-80">
-                 <Boxes size={14} />
-                 <span className="text-xs font-medium">库存件数</span>
+        <div className="mb-3 grid grid-cols-2 gap-2 rounded-xl bg-slate-900 p-2 text-white shadow-lg shadow-slate-200/70 dark:bg-zinc-900 dark:shadow-none">
+          {[
+            {
+              key: 'total-count',
+              icon: Boxes,
+              label: '总库存数',
+              value: (
+                <>
+                  {inventoryStats.totalCount}
+                  <span className="ml-1 text-[11px] font-normal opacity-60">件</span>
+                </>
+              ),
+            },
+            {
+              key: 'total-value',
+              icon: CircleDollarSign,
+              label: '预估总值',
+              value: formatCompactCurrency(inventoryStats.totalValue),
+            },
+            {
+              key: 'warehouse-count',
+              icon: WarehouseIcon,
+              label: '该仓库库存数',
+              value: (
+                <>
+                  {inventoryStats.warehouseCount}
+                  <span className="ml-1 text-[11px] font-normal opacity-60">件</span>
+                </>
+              ),
+            },
+            {
+              key: 'warehouse-value',
+              icon: CircleDollarSign,
+              label: '该仓库预估总值',
+              value: formatCompactCurrency(inventoryStats.warehouseValue),
+            },
+          ].map((stat) => {
+            const Icon = stat.icon;
+
+            return (
+              <div
+                key={stat.key}
+                className="rounded-lg border border-white/8 bg-white/[0.04] px-2.5 py-2 dark:border-white/5 dark:bg-white/[0.03]"
+              >
+                <div className="flex items-center gap-1.5 text-[10px] font-medium leading-tight text-slate-300/90 dark:text-zinc-300/90">
+                  <Icon size={11} className="shrink-0 opacity-80" />
+                  <span className="truncate">{stat.label}</span>
+                </div>
+                <div className="mt-1 text-[18px] font-bold leading-none tracking-tight text-white">
+                  {stat.value}
+                </div>
               </div>
-              <div className="text-2xl font-bold">{warehouseStats.count} <span className="text-xs font-normal opacity-60">件</span></div>
-           </div>
-           <div className="pl-4">
-              <div className="flex items-center space-x-1.5 mb-2 opacity-80">
-                 <CircleDollarSign size={14} />
-                 <span className="text-xs font-medium">预估总价值</span>
-              </div>
-              <div className="text-2xl font-bold tracking-tight">¥{(warehouseStats.value / 10000).toFixed(1)}w</div>
-           </div>
+            );
+          })}
         </div>
         
         <div className="bg-white dark:bg-zinc-900 rounded-xl p-1 shadow-sm border border-slate-200 dark:border-zinc-800 mb-3">
@@ -336,6 +693,38 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
             </button>
           ))}
         </div>
+
+        {isSelectionMode && (
+          <div className="mt-3 rounded-xl border border-dewu-100 bg-white px-3 py-2 shadow-sm dark:border-dewu-900/40 dark:bg-zinc-900">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold text-slate-900 dark:text-white">已进入勾选模式</div>
+                <div className="text-[10px] text-slate-500 dark:text-zinc-400">已选 {selectedProductIds.length} 个商品</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleToggleSelectAllVisible}
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-medium text-slate-600 dark:border-zinc-700 dark:text-zinc-300"
+                >
+                  {allVisibleSelected ? '取消全选' : '全选本页'}
+                </button>
+                <button
+                  onClick={resetSelectionMode}
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-medium text-slate-600 dark:border-zinc-700 dark:text-zinc-300"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleBatchDelete}
+                  disabled={selectedProductIds.length === 0 || isBatchDeleting}
+                  className="rounded-lg bg-red-500 px-3 py-1.5 text-[11px] font-medium text-white disabled:opacity-50"
+                >
+                  {isBatchDeleting ? '删除中...' : `批量删除${selectedProductIds.length > 0 ? ` (${selectedProductIds.length})` : ''}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Product List */}
@@ -347,7 +736,13 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
             </div>
         ) : (
             <>
-                <p className="text-[10px] text-slate-400 dark:text-zinc-500 text-center mb-1">长按商品进行管理 · 每页 {ITEMS_PER_PAGE} 条 · 共 {totalCount} 条</p>
+                <p className="text-[10px] text-slate-400 dark:text-zinc-500 text-center mb-1">
+                  {isSelectionMode
+                    ? '点击商品可勾选或取消勾选'
+                    : isSearchGroupingMode
+                      ? `该搜索下共有 ${aggregatedSearchResults.length} 款商品，${aggregatedSearchStockCount} 个库存`
+                      : `长按商品进行管理 · 每页 ${ITEMS_PER_PAGE} 条 · 共 ${totalCount} 条`}
+                </p>
                 
                 {products.length === 0 && (
                     <div className="text-center py-20 text-slate-400 dark:text-zinc-500 text-xs">
@@ -355,7 +750,55 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                     </div>
                 )}
 
-                {products.map((product) => (
+                {isSearchGroupingMode ? aggregatedSearchResults.map((group) => (
+                  <div
+                    key={group.key}
+                    className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-slate-100 dark:border-zinc-800 shadow-sm space-y-3"
+                  >
+                    <div className="flex space-x-3">
+                      <img src={group.imageUrl} alt={group.name} className="w-14 h-14 rounded-lg object-cover bg-slate-100 dark:bg-zinc-800 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <span className="text-[10px] font-bold text-slate-400 dark:text-zinc-500 bg-slate-50 dark:bg-zinc-800 px-1 py-0.5 rounded uppercase tracking-wider mb-1 inline-block">{group.brand}</span>
+                            <h3 className="text-sm font-semibold text-slate-900 dark:text-white leading-tight truncate">{group.name}</h3>
+                            <p className="text-[10px] text-slate-400 dark:text-zinc-500 mt-0.5">货号: {group.sku}</p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="text-[10px] text-slate-400 dark:text-zinc-500">总库存</div>
+                            <div className="text-sm font-bold text-dewu-600 dark:text-dewu-400">{group.totalStock}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-100 dark:border-zinc-800 p-1 grid grid-cols-3 gap-1">
+                      {group.sizeRows.map((sizeRow) => (
+                        <button
+                          key={sizeRow.key}
+                          onClick={() => onEditProduct(sizeRow.primaryProduct)}
+                          className="w-full px-1.5 py-1 rounded-md border border-slate-100 dark:border-zinc-800 bg-white/90 dark:bg-zinc-900/80 text-left hover:bg-white dark:hover:bg-zinc-900 transition-colors"
+                        >
+                          <div className="min-w-0 flex flex-col gap-1">
+                            <div className="flex items-center gap-1 flex-wrap">
+                              <span className="bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-200 text-[9px] px-1 py-0.5 rounded font-medium leading-none">{sizeRow.size}码</span>
+                              <span className="text-[9px] px-1 py-0.5 rounded font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 leading-none">库存 {sizeRow.stock}</span>
+                            </div>
+                            <div className="flex items-end justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="text-[9px] text-slate-400 dark:text-zinc-500 leading-none">均成本</div>
+                                <div className="text-[11px] font-bold text-slate-900 dark:text-white mt-0.5 leading-none">¥{formatCost(sizeRow.averageCost)}</div>
+                              </div>
+                              {sizeRow.sourceCount > 1 && (
+                                <span className="text-[9px] text-slate-400 dark:text-zinc-500 leading-none shrink-0">合并 {sizeRow.sourceCount}</span>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )) : products.map((product) => (
                   <div 
                     key={product.id} 
                     className="bg-white dark:bg-zinc-900 p-2 rounded-xl border border-slate-100 dark:border-zinc-800 shadow-sm flex space-x-3 relative active:scale-[0.99] transition-transform select-none overflow-hidden"
@@ -367,6 +810,10 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                     onMouseLeave={handleTouchEnd}
                     onClick={(e) => {
                         e.stopPropagation();
+                        if (isSelectionMode) {
+                            toggleProductSelection(product.id);
+                            return;
+                        }
                         if (!activeProductId) {
                             onEditProduct(product);
                         }
@@ -389,6 +836,21 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                             <Edit size={20} />
                           </div>
                           <span className="text-[10px] font-medium text-white">修改</span>
+                        </button>
+
+                        <div className="w-[1px] h-8 bg-white/10"></div>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            enterSelectionMode(product.id);
+                          }}
+                          className="flex flex-col items-center group"
+                        >
+                          <div className="p-3 bg-dewu-500/20 rounded-full text-dewu-300 group-active:bg-dewu-500/30 transition-colors mb-1">
+                            <CheckCircle2 size={20} />
+                          </div>
+                          <span className="text-[10px] font-medium text-dewu-300">勾选</span>
                         </button>
 
                         <div className="w-[1px] h-8 bg-white/10"></div>
@@ -418,6 +880,18 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                         >
                             <X size={14} />
                         </button>
+                      </div>
+                    )}
+
+                    {isSelectionMode && (
+                      <div className="absolute left-2 top-2 z-10">
+                        <div className={`rounded-full ${selectedProductIds.includes(product.id) ? 'text-dewu-500' : 'text-slate-300 dark:text-zinc-600'}`}>
+                          {selectedProductIds.includes(product.id) ? (
+                            <CheckCircle2 size={18} fill="currentColor" className="text-dewu-500" />
+                          ) : (
+                            <Circle size={18} />
+                          )}
+                        </div>
                       </div>
                     )}
 
@@ -492,6 +966,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
       {/* FAB - Floating Action Button */}
       <button 
         onClick={onAddClick}
+        disabled={isSelectionMode}
         className="fixed bottom-24 right-5 w-14 h-14 bg-slate-900 dark:bg-dewu-500 rounded-full shadow-lg shadow-slate-300 dark:shadow-none flex items-center justify-center text-white active:scale-90 transition-transform z-30"
       >
         <Plus size={28} />

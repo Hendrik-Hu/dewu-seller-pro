@@ -129,6 +129,36 @@ export const updateProductStock = async (productId: string, userId: string, stoc
   if (error) throw error;
 };
 
+export const updateProductStatus = async (
+  productId: string,
+  userId: string,
+  status: Product['status']
+) => {
+  const { error } = await supabase
+    .from('products')
+    .update({ status })
+    .eq('id', productId)
+    .eq('user_id', userId);
+
+  if (error) throw error;
+};
+
+export const batchUpdateProductStatus = async (
+  productIds: string[],
+  userId: string,
+  status: Product['status']
+) => {
+  if (productIds.length === 0) return;
+
+  const { error } = await supabase
+    .from('products')
+    .update({ status })
+    .in('id', productIds)
+    .eq('user_id', userId);
+
+  if (error) throw error;
+};
+
 export const renameProductsWarehouse = async (userId: string, oldName: string, newName: string) => {
   const { error } = await supabase
     .from('products')

@@ -1,6 +1,6 @@
 import React from 'react';
 import { ShoppingBag, Truck, Package, ArrowDownRight, ArrowUpRight, AlertCircle, ChevronRight, Clock, Sparkles, Bot } from 'lucide-react';
-import { Activity, Product } from '../types';
+import { Activity, Product, Warehouse } from '../types';
 import { InventoryStatsModal } from './InventoryStatsModal';
 import { AIAssistantModal } from './AIAssistantModal';
 import { AIManagementModal } from './AIManagementModal';
@@ -19,6 +19,7 @@ interface HomeProps {
   todaySalesAmount: number;
   todaySalesCount: number;
   products: Product[];
+  warehouses?: Warehouse[];
   onAIManageExecuted?: () => void;
 }
 
@@ -35,6 +36,7 @@ export const Home: React.FC<HomeProps> = ({
   todaySalesAmount,
   todaySalesCount,
   products,
+  warehouses = [],
   onAIManageExecuted
 }) => {
   // Inventory Modal State
@@ -67,27 +69,29 @@ export const Home: React.FC<HomeProps> = ({
       </div>
 
       {/* Quick Stats Cards */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-3">
         {/* Sales Card */}
-        <div className="bg-gradient-to-br from-dewu-500 to-dewu-600 p-4 rounded-2xl text-white shadow-lg shadow-dewu-200/20 flex flex-col justify-between">
-          <div className="flex justify-between items-start mb-2">
+        <div className="bg-gradient-to-br from-dewu-500 to-dewu-600 p-3.5 rounded-xl text-white shadow-lg shadow-dewu-200/20 min-h-[132px]">
+          <div className="flex justify-between items-center mb-3">
              <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
-              <ShoppingBag size={20} className="text-white" />
+              <ShoppingBag size={18} className="text-white" />
             </div>
             {/* Simple static trend indicator for now */}
-            <span className="text-xs font-medium bg-white/20 px-2 py-0.5 rounded-full text-white">今日实时</span>
+            <span className="text-[11px] font-medium bg-white/20 px-2 py-0.5 rounded-full text-white">今日实时</span>
           </div>
-          <div>
-            <div className="flex items-baseline space-x-1">
-              <span className="text-2xl font-bold">¥ {todaySalesAmount.toLocaleString()}</span>
+          <div className="space-y-2">
+            <div>
+              <div className="flex items-baseline space-x-1">
+                <span className="text-[30px] leading-none font-bold">¥ {todaySalesAmount.toLocaleString()}</span>
+              </div>
+              <div className="text-dewu-50 text-[11px] opacity-90 mt-1">今日销售额</div>
             </div>
-            <div className="text-dewu-50 text-xs opacity-90 mt-0.5">今日销售额</div>
             
-            <div className="w-full h-[1px] bg-white/20 my-2"></div>
+            <div className="w-full h-px bg-white/20"></div>
             
             <div className="flex items-baseline justify-between">
-              <span className="text-dewu-50 text-xs opacity-90">销售件数</span>
-              <span className="text-lg font-bold">{todaySalesCount} <span className="text-xs font-normal opacity-80">件</span></span>
+              <span className="text-dewu-50 text-[11px] opacity-90">销售件数</span>
+              <span className="text-xl leading-none font-bold">{todaySalesCount} <span className="text-[11px] font-normal opacity-80">件</span></span>
             </div>
           </div>
         </div>
@@ -95,17 +99,17 @@ export const Home: React.FC<HomeProps> = ({
         {/* Pending Orders Card */}
         <button 
           onClick={onPendingClick}
-          className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm flex flex-col justify-between group active:scale-95 transition-all text-left"
+          className="bg-white dark:bg-zinc-900 p-3.5 rounded-xl border border-slate-100 dark:border-zinc-800 shadow-sm min-h-[132px] group active:scale-95 transition-all text-left"
         >
-          <div className="w-full flex justify-between items-start mb-4">
+          <div className="w-full flex justify-between items-center mb-3">
             <div className="bg-orange-50 dark:bg-orange-900/20 p-2 rounded-lg group-hover:bg-orange-100 dark:group-hover:bg-orange-900/30 transition-colors">
-              <Truck size={20} className="text-orange-500" />
+              <Truck size={18} className="text-orange-500" />
             </div>
-            <ChevronRight size={16} className="text-slate-300 dark:text-zinc-600 group-hover:text-slate-400" />
+            <ChevronRight size={14} className="text-slate-300 dark:text-zinc-600 group-hover:text-slate-400" />
           </div>
-          <div>
-            <div className="text-3xl font-bold text-slate-900 dark:text-white mb-1">{pendingOrderCount}</div>
-            <div className="text-slate-400 dark:text-zinc-500 text-xs">待发货商品</div>
+          <div className="space-y-1.5">
+            <div className="text-[42px] leading-none font-bold text-slate-900 dark:text-white">{pendingOrderCount}</div>
+            <div className="text-slate-400 dark:text-zinc-500 text-[11px]">待发货商品</div>
           </div>
         </button>
       </div>
@@ -184,6 +188,7 @@ export const Home: React.FC<HomeProps> = ({
         isOpen={showAIManageModal}
         onClose={() => setShowAIManageModal(false)}
         products={products}
+        warehouses={warehouses}
         onExecuted={onAIManageExecuted}
       />
 

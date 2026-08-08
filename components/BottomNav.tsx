@@ -10,7 +10,7 @@ interface BottomNavProps {
 export const BottomNav: React.FC<BottomNavProps> = ({ currentTab, onTabChange }) => {
   const navItems = [
     { id: Tab.HOME, label: '首页', icon: Home },
-    { id: Tab.PRODUCTS, label: '商品', icon: Package },
+    { id: Tab.PRODUCTS, label: '库存', icon: Package },
     { id: Tab.STATS, label: '统计', icon: BarChart3 },
     { id: Tab.ME, label: '我的', icon: User },
   ];

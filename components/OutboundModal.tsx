@@ -37,13 +37,37 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, p
 
   // Only show results if user has typed something
   const hasSearch = searchTerm.trim().length > 0;
+  const normalizedSearch = searchTerm.trim().toLowerCase();
 
   const availableProducts = hasSearch 
-    ? products.filter(p => 
-        p.stock > 0 && 
-        (p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-         p.sku.toLowerCase().includes(searchTerm.toLowerCase()))
-      )
+    ? products
+        .filter(p =>
+          p.stock > 0 &&
+          [
+            p.name,
+            p.sku,
+            p.brand,
+            p.size,
+            p.source,
+            p.warehouse,
+            p.location,
+          ]
+            .filter(Boolean)
+            .some(value => String(value).toLowerCase().includes(normalizedSearch))
+        )
+        .sort((a, b) => {
+          const aSkuExact = a.sku.toLowerCase() === normalizedSearch ? 3 : a.sku.toLowerCase().startsWith(normalizedSearch) ? 2 : a.name.toLowerCase().startsWith(normalizedSearch) ? 1 : 0;
+          const bSkuExact = b.sku.toLowerCase() === normalizedSearch ? 3 : b.sku.toLowerCase().startsWith(normalizedSearch) ? 2 : b.name.toLowerCase().startsWith(normalizedSearch) ? 1 : 0;
+          if (aSkuExact !== bSkuExact) return bSkuExact - aSkuExact;
+          return b.stock - a.stock;
+        })
+    : [];
+
+  const quickPickProducts = !hasSearch
+    ? products
+        .filter((p) => p.stock > 0)
+        .sort((a, b) => b.stock - a.stock)
+        .slice(0, 8)
     : [];
 
   // Find other sizes for the same SKU
@@ -86,10 +110,36 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, p
 
             <div className="overflow-y-auto p-4 space-y-3 min-h-[200px]">
               {!hasSearch ? (
-                <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-2 mt-10">
-                  <Search size={32} className="opacity-20" />
-                  <span className="text-xs">请输入货号搜索库存商品</span>
-                </div>
+                quickPickProducts.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-2 mt-10">
+                    <Search size={32} className="opacity-20" />
+                    <span className="text-xs">请输入货号搜索库存商品</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-[11px] text-slate-400 mb-1">常用在库商品</div>
+                    {quickPickProducts.map(product => (
+                      <div key={product.id} className="flex items-center space-x-3 bg-white p-2 rounded-xl border border-slate-100 shadow-sm animate-[fadeIn_0.2s_ease-out]">
+                        <img src={product.imageUrl} alt={product.name} className="w-14 h-14 rounded-lg object-cover bg-slate-100" />
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-xs font-bold text-slate-900 truncate">{product.name}</h4>
+                          <p className="text-[10px] text-slate-400 mt-0.5">{product.sku} · {product.size}码 · 库存 {product.stock}</p>
+                          <p className="text-sm font-bold text-dewu-600 mt-1">¥{product.price}</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setSelectedProduct(product);
+                            setSellingPrice(product.price.toString());
+                            setQuantity(1);
+                          }}
+                          className="bg-slate-900 text-white p-2 rounded-lg active:scale-95 transition-transform"
+                        >
+                          <ArrowUpRight size={18} />
+                        </button>
+                      </div>
+                    ))}
+                  </>
+                )
               ) : availableProducts.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-2 mt-10">
                   <span className="text-sm font-medium">商品不存在</span>
@@ -100,7 +150,8 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, p
                     <img src={product.imageUrl} alt={product.name} className="w-14 h-14 rounded-lg object-cover bg-slate-100" />
                     <div className="flex-1 min-w-0">
                       <h4 className="text-xs font-bold text-slate-900 truncate">{product.name}</h4>
-                      <p className="text-[10px] text-slate-400 mt-0.5">Size: {product.size} · Stock: {product.stock}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">{product.brand} · {product.size}码 · 库存 {product.stock}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">{product.sku}{product.source ? ` · ${product.source}` : ''}</p>
                       <p className="text-sm font-bold text-dewu-600 mt-1">¥{product.price}</p>
                     </div>
                     <button 
