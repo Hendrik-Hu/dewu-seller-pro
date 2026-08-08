@@ -8,6 +8,7 @@
     "dev:agent": "node --env-file=.env.local local-agent-server.mjs",
     "build": "node ./node_modules/vite/bin/vite.js build",
     "preview": "node ./node_modules/vite/bin/vite.js preview",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
     "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
     "android:sync": "node ./node_modules/vite/bin/vite.js build && node ./node_modules/@capacitor/cli/bin/capacitor sync android"
   },
