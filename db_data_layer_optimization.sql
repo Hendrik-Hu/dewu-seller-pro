@@ -60,6 +60,10 @@ BEGIN
     RAISE EXCEPTION 'Quantity must be greater than 0';
   END IF;
 
+  IF p_sale_price IS NULL OR p_sale_price < 0 THEN
+    RAISE EXCEPTION 'Sale price must be greater than or equal to 0';
+  END IF;
+
   SELECT *
   INTO v_product
   FROM products

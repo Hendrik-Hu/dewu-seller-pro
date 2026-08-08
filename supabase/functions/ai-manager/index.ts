@@ -99,9 +99,17 @@ const verifyPlanEnvelope = async (secret: string, envelope: PlanEnvelope, token:
 
 const findWarehouseName = (input: Record<string, unknown>, context: any) => {
   const requested = toText(input.warehouse);
-  if (requested) return requested;
-  const defaultWarehouse = context?.warehouses?.find((warehouse: any) => warehouse.is_default);
-  return defaultWarehouse?.name || context?.warehouses?.[0]?.name || "杭州一号仓";
+  const warehouses = Array.isArray(context?.warehouses) ? context.warehouses : [];
+
+  if (requested) {
+    const matchedWarehouse = warehouses.find(
+      (warehouse: any) => toText(warehouse.name).toLowerCase() === requested.toLowerCase(),
+    );
+    return toText(matchedWarehouse?.name);
+  }
+
+  const defaultWarehouse = warehouses.find((warehouse: any) => warehouse.is_default);
+  return toText(defaultWarehouse?.name) || toText(warehouses[0]?.name);
 };
 
 const parsePossibleJson = (value: unknown) => {
@@ -364,10 +372,13 @@ const buildCanonicalActionInput = (
   context: any,
 ) => {
   const matchedProduct = findMatchingContextProducts(input, context)[0];
+  const rawQuantity = input.quantity ?? input.count;
   const canonicalInput: Record<string, unknown> = {
     sku: toText(input.sku).toUpperCase(),
     size: toText(input.size),
-    quantity: Math.max(1, Math.floor(toNumber(input.quantity ?? input.count, 1))),
+    quantity: rawQuantity === undefined || rawQuantity === null || rawQuantity === ""
+      ? 1
+      : toNumber(rawQuantity, 0),
     warehouse: findWarehouseName(input, context),
     brand: toText(input.brand) || inferBrandFromContext(input, context) || toText(matchedProduct?.brand),
   };
@@ -378,7 +389,7 @@ const buildCanonicalActionInput = (
     canonicalInput.location = toText(input.location, "");
     canonicalInput.imageUrl = toText(input.imageUrl ?? input.image_url, "");
   } else {
-    canonicalInput.salePrice = toNumber(input.salePrice ?? input.sellingPrice ?? input.price, 0);
+    canonicalInput.salePrice = toNumber(input.salePrice ?? input.sellingPrice, 0);
   }
 
   return canonicalInput;
@@ -394,30 +405,44 @@ const hydrateActionWithContext = (action: AgentAction, context: any): AgentActio
 };
 
 const getMissingRequiredFields = (action: AgentAction) => {
-  if (action.type === "answer") return [] as Array<"brand" | "sku" | "size">;
+  if (action.type === "answer") return [] as Array<"brand" | "sku" | "size" | "warehouse">;
 
   const input = action.input || {};
-  const missing: Array<"brand" | "sku" | "size"> = [];
+  const missing: Array<"brand" | "sku" | "size" | "warehouse"> = [];
   if (!isMeaningfulText(input.brand)) missing.push("brand");
   if (!isMeaningfulText(input.sku)) missing.push("sku");
   if (!isMeaningfulText(input.size)) missing.push("size");
+  if (!isMeaningfulText(input.warehouse)) missing.push("warehouse");
   return missing;
 };
 
-const fieldLabelMap: Record<"brand" | "sku" | "size", string> = {
+const fieldLabelMap: Record<"brand" | "sku" | "size" | "warehouse", string> = {
   brand: "品牌",
   sku: "货号",
   size: "尺码",
+  warehouse: "有效仓库",
 };
 
-const buildValidationFailure = (action: AgentAction, missingFields: Array<"brand" | "sku" | "size">): ActionResult => {
+const buildValidationFailure = (action: AgentAction, missingFields: Array<"brand" | "sku" | "size" | "warehouse">): ActionResult => {
   const typeLabel = action.type === "inbound" ? "入库" : "出库";
   const missingText = missingFields.map((field) => fieldLabelMap[field]).join("、");
 
   return {
     type: action.type,
     status: "failed",
-    summary: `计划失败：AI 管理执行${typeLabel}时必须包含品牌、货号、尺码。当前缺少：${missingText}。数量未写默认 1，仓库未写默认主仓库，成本未写默认 0。`,
+    summary: `计划失败：AI 管理执行${typeLabel}时必须能确认品牌、货号、尺码和有效仓库。当前缺少或无法识别：${missingText}。数量未写默认 1，仓库未写默认主仓库，成本未写默认 0。`,
+  };
+};
+
+const buildQuantityValidationFailure = (action: AgentAction): ActionResult | null => {
+  if (action.type === "answer") return null;
+  const quantity = toNumber(action.input?.quantity, 0);
+  if (Number.isInteger(quantity) && quantity > 0) return null;
+
+  return {
+    type: action.type,
+    status: "failed",
+    summary: "计划失败：出入库数量必须是正整数。数量未写时默认 1。",
   };
 };
 
@@ -439,7 +464,9 @@ const sanitizeAction = (action: unknown): AgentAction | null => {
   const normalizedInput: Record<string, unknown> = {
     sku: toText(input.sku).toUpperCase(),
     size: toText(input.size),
-    quantity: Math.max(1, Math.floor(toNumber(input.quantity ?? input.count, 1))),
+    quantity: input.quantity === undefined && input.count === undefined
+      ? 1
+      : toNumber(input.quantity ?? input.count, 0),
     warehouse: toText(input.warehouse),
   };
 
@@ -451,7 +478,7 @@ const sanitizeAction = (action: unknown): AgentAction | null => {
     normalizedInput.imageUrl = toText(input.imageUrl ?? input.image_url, "");
   } else if (type === "outbound") {
     normalizedInput.brand = toText(input.brand, "");
-    normalizedInput.salePrice = toNumber(input.salePrice ?? input.sellingPrice ?? input.price, 0);
+    normalizedInput.salePrice = toNumber(input.salePrice ?? input.sellingPrice, 0);
   }
 
   return {
@@ -540,6 +567,8 @@ const previewInbound = (input: Record<string, unknown>, context: any): ActionRes
   const action = hydrateActionWithContext({ type: "inbound", input }, context);
   const missingFields = getMissingRequiredFields(action);
   if (missingFields.length > 0) return buildValidationFailure(action, missingFields);
+  const quantityFailure = buildQuantityValidationFailure(action);
+  if (quantityFailure) return quantityFailure;
 
   const canonicalInput = action.input || {};
   const sku = toText(canonicalInput.sku).toUpperCase();
@@ -576,12 +605,15 @@ const previewOutbound = (input: Record<string, unknown>, context: any): ActionRe
   const action = hydrateActionWithContext({ type: "outbound", input }, context);
   const missingFields = getMissingRequiredFields(action);
   if (missingFields.length > 0) return buildValidationFailure(action, missingFields);
+  const quantityFailure = buildQuantityValidationFailure(action);
+  if (quantityFailure) return quantityFailure;
 
   const canonicalInput = action.input || {};
   const sku = toText(canonicalInput.sku).toUpperCase();
   const brand = toText(canonicalInput.brand);
   const size = toText(canonicalInput.size);
   const quantity = Math.max(1, Math.floor(toNumber(canonicalInput.quantity ?? canonicalInput.count, 1)));
+  const salePrice = toNumber(canonicalInput.salePrice ?? canonicalInput.sellingPrice, 0);
   const warehouse = toText(canonicalInput.warehouse);
 
   const matches = Array.isArray(context?.products)
@@ -611,7 +643,7 @@ const previewOutbound = (input: Record<string, unknown>, context: any): ActionRe
   return {
     type: "outbound",
     status: "planned",
-    summary: `计划出库 ${brand} / ${toText(product.name, sku)} / ${sku} / ${toText(product.size)}码 x${quantity}，仓库 ${toText(product.warehouse, "未设置")}。`,
+    summary: `计划出库 ${brand} / ${toText(product.name, sku)} / ${sku} / ${toText(product.size)}码 x${quantity}，售价 ${salePrice}，仓库 ${toText(product.warehouse, "未设置")}。`,
   };
 };
 
@@ -635,6 +667,8 @@ const executeInbound = async (db: any, userId: string, input: Record<string, unk
   const action = hydrateActionWithContext({ type: "inbound", input }, context);
   const missingFields = getMissingRequiredFields(action);
   if (missingFields.length > 0) return buildValidationFailure(action, missingFields);
+  const quantityFailure = buildQuantityValidationFailure(action);
+  if (quantityFailure) return quantityFailure;
 
   const canonicalInput = action.input || {};
   const sku = toText(canonicalInput.sku).toUpperCase();
@@ -727,16 +761,18 @@ const executeInbound = async (db: any, userId: string, input: Record<string, unk
   };
 };
 
-const executeOutbound = async (db: any, userId: string, input: Record<string, unknown>, context: any): Promise<ActionResult> => {
+const executeOutbound = async (db: any, userDb: any, userId: string, input: Record<string, unknown>, context: any): Promise<ActionResult> => {
   const action = hydrateActionWithContext({ type: "outbound", input }, context);
   const missingFields = getMissingRequiredFields(action);
   if (missingFields.length > 0) return buildValidationFailure(action, missingFields);
+  const quantityFailure = buildQuantityValidationFailure(action);
+  if (quantityFailure) return quantityFailure;
 
   const canonicalInput = action.input || {};
   const sku = toText(canonicalInput.sku).toUpperCase();
   const size = toText(canonicalInput.size);
   const quantity = Math.max(1, Math.floor(toNumber(canonicalInput.quantity ?? canonicalInput.count, 1)));
-  const salePrice = toNumber(canonicalInput.salePrice ?? canonicalInput.sellingPrice ?? canonicalInput.price, 0);
+  const salePrice = toNumber(canonicalInput.salePrice ?? canonicalInput.sellingPrice, 0);
   const warehouse = toText(canonicalInput.warehouse);
 
   let query = db
@@ -763,40 +799,20 @@ const executeOutbound = async (db: any, userId: string, input: Record<string, un
     return { type: "outbound", status: "failed", summary: `出库失败：${sku} 库存不足，当前 ${product.stock}。` };
   }
 
-  const nextStock = Number(product.stock || 0) - quantity;
-  const { error: updateError } = await db
-    .from("products")
-    .update({
-      stock: nextStock,
-      status: nextStock <= 0 ? "sold" : product.status,
-    })
-    .eq("id", product.id)
-    .eq("user_id", userId);
-
-  if (updateError) throw updateError;
-
-  const { error: activityError } = await db.from("activities").insert({
-    id: `act-${Date.now()}`,
-    type: "outbound",
-    product_name: product.name,
-    time: "刚刚",
-    sku: product.sku,
-    size: product.size,
-    price: salePrice || product.price,
-    cost: product.price,
-    image_url: product.image_url,
-    created_at: new Date().toISOString(),
-    warehouse: product.warehouse,
-    count: quantity,
-    user_id: userId,
+  const { error: outboundError } = await userDb.rpc("outbound_product", {
+    p_product_id: product.id,
+    p_user_id: userId,
+    p_sale_price: salePrice,
+    p_quantity: quantity,
+    p_platform: "AI 管理",
   });
 
-  if (activityError) throw activityError;
+  if (outboundError) throw outboundError;
 
   return {
     type: "outbound",
     status: "success",
-    summary: `已出库 ${product.sku} ${product.size} x${quantity}，售价 ${salePrice || product.price}`,
+    summary: `已出库 ${product.sku} ${product.size} x${quantity}，售价 ${salePrice}`,
   };
 };
 
@@ -934,7 +950,7 @@ serve(async (req) => {
         if (action.type === "inbound") {
           results.push(await executeInbound(db, authData.user.id, action.input || {}, context));
         } else if (action.type === "outbound") {
-          results.push(await executeOutbound(db, authData.user.id, action.input || {}, context));
+          results.push(await executeOutbound(db, authClient, authData.user.id, action.input || {}, context));
         } else {
           results.push({
             type: "answer",

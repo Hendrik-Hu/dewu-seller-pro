@@ -535,6 +535,7 @@ export default function App() {
     } catch (error: any) {
       console.error('Outbound error:', error);
       alert(`出库失败: ${error.message || JSON.stringify(error)}`);
+      throw error;
     }
   };
 

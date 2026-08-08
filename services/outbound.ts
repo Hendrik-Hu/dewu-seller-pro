@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { Product } from '../types';
 import { createInventoryActivity } from './activities';
+import { normalizeOutboundQuantity, normalizeSalePrice } from '../lib/outboundRules';
 
 export interface OutboundParams {
   product: Product;
@@ -21,7 +22,9 @@ const fallbackOutboundProduct = async ({
   salePrice,
   quantity = 1,
 }: OutboundParams) => {
-  const nextStock = product.stock - quantity;
+  const validatedQuantity = normalizeOutboundQuantity(quantity, product.stock);
+  const validatedSalePrice = normalizeSalePrice(salePrice);
+  const nextStock = product.stock - validatedQuantity;
 
   const { data: updatedRows, error: updateError } = await supabase
     .from('products')
@@ -45,11 +48,24 @@ const fallbackOutboundProduct = async ({
     productName: product.name,
     sku: product.sku,
     size: product.size,
-    price: salePrice,
+    price: validatedSalePrice,
     cost: product.price,
     imageUrl: product.imageUrl,
     warehouse: product.warehouse,
-    count: quantity,
+    count: validatedQuantity,
+  }).catch(async (activityError) => {
+    const { error: rollbackError } = await supabase
+      .from('products')
+      .update({ stock: product.stock, status: product.status })
+      .eq('id', product.id)
+      .eq('user_id', userId)
+      .eq('stock', nextStock);
+
+    if (rollbackError) {
+      throw new Error(`出库流水写入失败，库存自动恢复也失败：${String(activityError?.message || activityError)}`);
+    }
+
+    throw activityError;
   });
 };
 
@@ -60,26 +76,23 @@ export const outboundProduct = async ({
   quantity = 1,
   platform = '得物',
 }: OutboundParams) => {
-  if (quantity <= 0) {
-    throw new Error('出库数量必须大于 0。');
-  }
+  const validatedQuantity = normalizeOutboundQuantity(quantity, product.stock);
+  const validatedSalePrice = normalizeSalePrice(salePrice);
 
-  if (product.stock < quantity) {
-    throw new Error('库存不足。');
-  }
+  if (!product.id || !userId) throw new Error('商品或用户信息不完整，请刷新后重试。');
 
   const { error } = await supabase.rpc('outbound_product', {
     p_product_id: product.id,
     p_user_id: userId,
-    p_sale_price: salePrice,
-    p_quantity: quantity,
+    p_sale_price: validatedSalePrice,
+    p_quantity: validatedQuantity,
     p_platform: platform,
   });
 
   if (!error) return;
 
   if (isMissingRpcError(error)) {
-    await fallbackOutboundProduct({ product, userId, salePrice, quantity, platform });
+    await fallbackOutboundProduct({ product, userId, salePrice: validatedSalePrice, quantity: validatedQuantity, platform });
     return;
   }
 
