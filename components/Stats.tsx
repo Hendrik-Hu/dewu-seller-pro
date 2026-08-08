@@ -30,6 +30,7 @@ export const Stats: React.FC<StatsProps> = ({ products, activities }) => {
   const salesChartData = analytics.charts.salesTrend;
   const brandData = analytics.charts.topBrands;
   const topProducts = analytics.charts.topProducts;
+  const hasMissingCosts = monthly.missingCostCount > 0;
 
   return (
     <div className="px-5 py-6 pb-24 h-full overflow-y-auto bg-slate-50 dark:bg-black transition-colors duration-300">
@@ -39,19 +40,19 @@ export const Stats: React.FC<StatsProps> = ({ products, activities }) => {
         <div className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-slate-100 dark:border-zinc-800 shadow-sm flex flex-col justify-between min-h-[80px]">
           <p className="text-[10px] text-slate-400 dark:text-zinc-500 mb-1">本月销售额</p>
           <p className="text-sm font-bold text-slate-900 dark:text-white">¥{monthly.salesAmount.toLocaleString()}</p>
-          <p className="text-[10px] text-slate-300 dark:text-zinc-600 font-medium mt-1">按出库数量汇总</p>
+          <p className="text-[10px] text-slate-300 dark:text-zinc-600 font-medium mt-1">本自然月成交金额</p>
         </div>
         <div className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-slate-100 dark:border-zinc-800 shadow-sm flex flex-col justify-between min-h-[80px]">
-          <p className="text-[10px] text-slate-400 dark:text-zinc-500 mb-1">本月利润</p>
-          <p className={`text-sm font-bold ${monthly.profitAmount >= 0 ? 'text-slate-900 dark:text-white' : 'text-red-500'}`}>
-            ¥{monthly.profitAmount.toLocaleString()}
+          <p className="text-[10px] text-slate-400 dark:text-zinc-500 mb-1">本月销售成本</p>
+          <p className="text-sm font-bold text-slate-900 dark:text-white">¥{monthly.costAmount.toLocaleString()}</p>
+          <p className="text-[10px] text-slate-300 dark:text-zinc-600 font-medium mt-1">仅统计已记录成本</p>
+        </div>
+        <div className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-slate-100 dark:border-zinc-800 shadow-sm flex flex-col justify-between min-h-[80px]">
+          <p className="text-[10px] text-slate-400 dark:text-zinc-500 mb-1">本月毛利润</p>
+          <p className={`text-sm font-bold ${monthly.grossProfitAmount >= 0 ? 'text-slate-900 dark:text-white' : 'text-red-500'}`}>
+            ¥{monthly.grossProfitAmount.toLocaleString()}
           </p>
-          <p className="text-[10px] text-slate-300 dark:text-zinc-600 font-medium mt-1">销售额减成本</p>
-        </div>
-        <div className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-slate-100 dark:border-zinc-800 shadow-sm flex flex-col justify-between min-h-[80px]">
-          <p className="text-[10px] text-slate-400 dark:text-zinc-500 mb-1">本月利润率</p>
-          <p className="text-sm font-bold text-slate-900 dark:text-white">{monthly.profitRate.toFixed(1)}%</p>
-          <p className="text-[10px] text-slate-300 dark:text-zinc-600 font-medium mt-1">利润 / 销售额</p>
+          <p className="text-[10px] text-slate-300 dark:text-zinc-600 font-medium mt-1">已计成本销售额减成本</p>
         </div>
 
         <div className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-slate-100 dark:border-zinc-800 shadow-sm flex flex-col justify-between min-h-[80px]">
@@ -65,11 +66,17 @@ export const Stats: React.FC<StatsProps> = ({ products, activities }) => {
           <p className="text-[10px] text-slate-300 dark:text-zinc-600 font-medium mt-1">本月累计</p>
         </div>
         <div className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-slate-100 dark:border-zinc-800 shadow-sm flex flex-col justify-between min-h-[80px]">
-          <p className="text-[10px] text-slate-400 dark:text-zinc-500 mb-1">售出件数</p>
-          <p className="text-sm font-bold text-slate-900 dark:text-white">{monthly.soldCount}</p>
-          <p className="text-[10px] text-slate-300 dark:text-zinc-600 font-medium mt-1">本月累计</p>
+          <p className="text-[10px] text-slate-400 dark:text-zinc-500 mb-1">本月毛利率</p>
+          <p className="text-sm font-bold text-slate-900 dark:text-white">{monthly.grossMarginRate.toFixed(1)}%</p>
+          <p className="text-[10px] text-slate-300 dark:text-zinc-600 font-medium mt-1">成本覆盖 {monthly.costCoverageRate.toFixed(0)}%</p>
         </div>
       </div>
+
+      {hasMissingCosts && (
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
+          本月有 {monthly.missingCostCount} 件出库缺少成本，毛利润和毛利率暂不包含这些记录。
+        </div>
+      )}
 
       <div
         onClick={() => setIsAIModalOpen(true)}
@@ -89,7 +96,7 @@ export const Stats: React.FC<StatsProps> = ({ products, activities }) => {
               <Sparkles size={12} className="text-indigo-600 dark:text-indigo-400" />
             </div>
             <div className="bg-white dark:bg-zinc-800 p-2.5 rounded-2xl rounded-tl-none border border-slate-100 dark:border-zinc-700 text-xs text-slate-600 dark:text-zinc-300 shadow-sm">
-              👋 嗨！我是你的智能助手。本月利润率为 <span className="font-bold text-slate-900 dark:text-white">{monthly.profitRate.toFixed(1)}%</span>，点击这里让我为你详细分析库存和销售趋势。
+              👋 嗨！我是你的智能助手。本月已记录成本商品的毛利率为 <span className="font-bold text-slate-900 dark:text-white">{monthly.grossMarginRate.toFixed(1)}%</span>，点击这里分析库存和销售趋势。
             </div>
           </div>
         </div>
@@ -116,7 +123,7 @@ export const Stats: React.FC<StatsProps> = ({ products, activities }) => {
       />
 
       <div className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm mb-6">
-        <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-4">30天营收趋势</h3>
+        <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-4">近30天销售额趋势</h3>
         <div className="h-32 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={salesChartData}>
@@ -181,7 +188,7 @@ export const Stats: React.FC<StatsProps> = ({ products, activities }) => {
       </div>
 
       <div className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm">
-        <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-4">热销排行 TOP 5</h3>
+        <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-4">历史热销排行 TOP 5</h3>
         <div className="space-y-4">
           {topProducts.map((item, idx) => (
             <div key={`${item.name}-${idx}`} className="flex items-center space-x-3">
