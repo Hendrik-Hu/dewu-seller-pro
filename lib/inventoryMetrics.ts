@@ -1,4 +1,4 @@
-import { Activity, Product } from '../types';
+import type { Activity, Product } from '../types';
 
 const isValidDate = (value?: string) => {
   if (!value) return false;
@@ -21,6 +21,9 @@ export const getActivityGrossAmount = (activity: Activity) =>
 export const getActivityCostAmount = (activity: Activity) =>
   (Number(activity.cost) || 0) * getActivityQuantity(activity);
 
+export const hasRecordedActivityCost = (activity: Activity) =>
+  activity.cost !== undefined && activity.cost !== null && Number.isFinite(Number(activity.cost)) && Number(activity.cost) >= 0;
+
 const isSameLocalDay = (date: Date | null, reference: Date) =>
   !!date &&
   date.getFullYear() === reference.getFullYear() &&
@@ -31,6 +34,9 @@ const isSameLocalMonth = (date: Date | null, reference: Date) =>
   !!date &&
   date.getFullYear() === reference.getFullYear() &&
   date.getMonth() === reference.getMonth();
+
+const getLocalDateKey = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
 const getInStockProducts = (products: Product[]) =>
   products.filter((product) => product.status === 'instock');
@@ -67,24 +73,39 @@ export const buildInventoryAnalytics = (
   const monthOutboundActivities = monthActivities.filter((activity) => activity.type === 'outbound');
   const monthInboundActivities = monthActivities.filter((activity) => activity.type === 'inbound');
   const monthSalesAmount = monthOutboundActivities.reduce((sum, activity) => sum + getActivityGrossAmount(activity), 0);
-  const monthCostAmount = monthOutboundActivities.reduce((sum, activity) => sum + getActivityCostAmount(activity), 0);
-  const monthProfitAmount = monthSalesAmount - monthCostAmount;
-  const monthProfitRate = monthSalesAmount > 0 ? (monthProfitAmount / monthSalesAmount) * 100 : 0;
+  const monthCostedOutboundActivities = monthOutboundActivities.filter(hasRecordedActivityCost);
+  const monthCostedSalesAmount = monthCostedOutboundActivities.reduce((sum, activity) => sum + getActivityGrossAmount(activity), 0);
+  const monthCostAmount = monthCostedOutboundActivities.reduce((sum, activity) => sum + getActivityCostAmount(activity), 0);
+  const monthGrossProfitAmount = monthCostedSalesAmount - monthCostAmount;
+  const monthGrossMarginRate = monthCostedSalesAmount > 0 ? (monthGrossProfitAmount / monthCostedSalesAmount) * 100 : 0;
   const monthInboundCount = monthInboundActivities.reduce((sum, activity) => sum + getActivityQuantity(activity), 0);
   const monthOutboundCount = monthOutboundActivities.reduce((sum, activity) => sum + getActivityQuantity(activity), 0);
+  const monthCostedOutboundCount = monthCostedOutboundActivities.reduce((sum, activity) => sum + getActivityQuantity(activity), 0);
+  const monthMissingCostCount = monthOutboundCount - monthCostedOutboundCount;
+  const monthCostCoverageRate = monthOutboundCount > 0 ? (monthCostedOutboundCount / monthOutboundCount) * 100 : 100;
 
-  const salesTrendMap = new Map<string, number>();
+  const salesTrendMap = new Map<string, { name: string; value: number }>();
+  const rollingStart = new Date(now);
+  rollingStart.setHours(0, 0, 0, 0);
+  rollingStart.setDate(rollingStart.getDate() - 29);
+  const rollingEnd = new Date(now);
+  rollingEnd.setHours(23, 59, 59, 999);
+
   for (let offset = 29; offset >= 0; offset -= 1) {
     const date = new Date(now);
     date.setDate(now.getDate() - offset);
-    salesTrendMap.set(`${date.getMonth() + 1}/${date.getDate()}`, 0);
+    salesTrendMap.set(getLocalDateKey(date), {
+      name: `${date.getMonth() + 1}/${date.getDate()}`,
+      value: 0,
+    });
   }
   outboundActivities.forEach((activity) => {
     const activityDate = getActivityDate(activity);
-    if (!activityDate) return;
-    const key = `${activityDate.getMonth() + 1}/${activityDate.getDate()}`;
-    if (salesTrendMap.has(key)) {
-      salesTrendMap.set(key, (salesTrendMap.get(key) || 0) + getActivityGrossAmount(activity));
+    if (!activityDate || activityDate < rollingStart || activityDate > rollingEnd) return;
+    const key = getLocalDateKey(activityDate);
+    const current = salesTrendMap.get(key);
+    if (current) {
+      current.value += getActivityGrossAmount(activity);
     }
   });
 
@@ -129,15 +150,17 @@ export const buildInventoryAnalytics = (
     },
     monthly: {
       salesAmount: monthSalesAmount,
+      costedSalesAmount: monthCostedSalesAmount,
       costAmount: monthCostAmount,
-      profitAmount: monthProfitAmount,
-      profitRate: monthProfitRate,
+      grossProfitAmount: monthGrossProfitAmount,
+      grossMarginRate: monthGrossMarginRate,
+      costCoverageRate: monthCostCoverageRate,
+      missingCostCount: monthMissingCostCount,
       inboundCount: monthInboundCount,
       outboundCount: monthOutboundCount,
-      soldCount: monthOutboundCount,
     },
     charts: {
-      salesTrend: Array.from(salesTrendMap.entries()).map(([name, value]) => ({ name, value })),
+      salesTrend: Array.from(salesTrendMap.values()),
       topBrands: Array.from(topBrandsMap.entries())
         .map(([name, value]) => ({ name, value }))
         .sort((a, b) => b.value - a.value)
