@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { ArchiveRestore, ChevronRight, LogOut, Edit2, Check, X, Camera, Moon, LayoutGrid, ToggleLeft, ToggleRight, Shield, Download } from 'lucide-react';
+import { ArchiveRestore, ChevronRight, LogOut, Edit2, Check, X, Camera, Moon, LayoutGrid, ToggleLeft, ToggleRight, Shield, Download, UserRound } from 'lucide-react';
 
 import { AccountSecurityModal } from './AccountSecurityModal';
 
@@ -117,7 +117,11 @@ export const Profile: React.FC<ProfileProps> = ({
             className="relative w-20 h-20 rounded-full bg-slate-200 dark:bg-zinc-800 border-4 border-slate-50 dark:border-zinc-700 shadow-sm group cursor-pointer"
             onClick={handleAvatarClick}
           >
-            <img src={avatarUrl} alt="User" className="w-full h-full object-cover rounded-full" />
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="User" className="w-full h-full object-cover rounded-full" />
+            ) : (
+              <UserRound size={34} className="m-auto h-full text-slate-400" aria-label="默认头像" />
+            )}
             <div className="absolute inset-0 bg-black/30 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
               <Camera className="text-white" size={24} />
             </div>

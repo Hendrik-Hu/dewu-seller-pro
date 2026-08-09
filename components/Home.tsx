@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingBag, Truck, Package, ArrowDownRight, ArrowUpRight, ChevronRight, Clock, Sparkles } from 'lucide-react';
+import { ShoppingBag, Truck, Package, ArrowDownRight, ArrowUpRight, ChevronRight, Clock, Sparkles, UserRound } from 'lucide-react';
 import { Activity, Product } from '../types';
 import { InventoryStatsModal } from './InventoryStatsModal';
 import { AIManagementModal } from './AIManagementModal';
@@ -61,7 +61,11 @@ export const Home: React.FC<HomeProps> = ({
           <p className="text-slate-500 dark:text-zinc-400 text-sm mt-1">今天也要爆单哦 🚀</p>
         </div>
         <button onClick={onAvatarClick} className="w-10 h-10 rounded-full bg-slate-100 dark:bg-zinc-800 overflow-hidden border border-slate-200 dark:border-zinc-700 active:opacity-80 transition-opacity">
-          <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+          {avatarUrl ? (
+            <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+          ) : (
+            <UserRound size={20} className="m-auto h-full text-slate-400" aria-label="默认头像" />
+          )}
         </button>
       </div>
 

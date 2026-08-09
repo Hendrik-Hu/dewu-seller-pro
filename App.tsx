@@ -74,7 +74,7 @@ export default function App() {
   // User Profile State
   const [userProfile, setUserProfile] = useState({
     name: '得物卖家',
-    avatar: 'https://picsum.photos/200/200?random=user'
+    avatar: ''
   });
 
   // Fetch Profile from Supabase
@@ -94,14 +94,12 @@ export default function App() {
       }
 
       if (data) {
-        let avatarUrl = data.avatar_url || 'https://picsum.photos/200/200?random=user';
+        let avatarUrl = data.avatar_url || '';
         
         // Fix for legacy data: if avatar is a blob URL (which is temporary), revert to default
         if (avatarUrl.startsWith('blob:')) {
             console.warn('Found invalid blob URL in profile, reverting to default.');
-            avatarUrl = 'https://picsum.photos/200/200?random=user';
-            // Optional: Auto-fix in background
-            updateProfile({ avatar: avatarUrl });
+            avatarUrl = '';
         }
 
         setUserProfile({
@@ -118,7 +116,7 @@ export default function App() {
   const updateProfile = async (updates: { name?: string; avatar?: string; avatarFile?: File }) => {
     if (!session?.user?.id) return;
 
-    let newAvatarUrl = updates.avatar || userProfile.avatar;
+    let newAvatarUrl = updates.avatar ?? userProfile.avatar;
 
     // Handle File Upload
     if (updates.avatarFile) {
