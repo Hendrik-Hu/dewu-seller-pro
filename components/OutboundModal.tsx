@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, ArrowUpRight, Search, DollarSign } from 'lucide-react';
 import { Product } from '../types';
 import { normalizeOutboundQuantity, normalizeSalePrice } from '../lib/outboundRules';
+import { formatProductSize, normalizeSku } from '../lib/productNormalization';
 
 interface OutboundModalProps {
   isOpen: boolean;
@@ -92,7 +93,7 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, p
   // Find other sizes for the same SKU
   const sameSkuProducts = selectedProduct 
     ? products
-        .filter(p => p.sku === selectedProduct.sku && p.stock > 0)
+        .filter(p => normalizeSku(p.sku) === normalizeSku(selectedProduct.sku) && p.stock > 0)
         .sort((a, b) => parseFloat(a.size) - parseFloat(b.size))
     : [];
 
@@ -142,7 +143,7 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, p
                         <img src={product.imageUrl} alt={product.name} className="w-14 h-14 rounded-lg object-cover bg-slate-100" />
                         <div className="flex-1 min-w-0">
                           <h4 className="text-xs font-bold text-slate-900 truncate">{product.name}</h4>
-                          <p className="text-[10px] text-slate-400 mt-0.5">{product.sku} · {product.size}码 · 库存 {product.stock}</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">{product.sku} · {formatProductSize(product.size)} · 库存 {product.stock}</p>
                           <p className="text-[10px] text-slate-400 mt-0.5">{product.warehouse || '未设置仓库'} · 成本 ¥{product.price}</p>
                         </div>
                         <button
@@ -167,7 +168,7 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, p
                     <img src={product.imageUrl} alt={product.name} className="w-14 h-14 rounded-lg object-cover bg-slate-100" />
                     <div className="flex-1 min-w-0">
                       <h4 className="text-xs font-bold text-slate-900 truncate">{product.name}</h4>
-                      <p className="text-[10px] text-slate-400 mt-0.5">{product.brand} · {product.size}码 · 库存 {product.stock}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">{product.brand} · {formatProductSize(product.size)} · 库存 {product.stock}</p>
                       <p className="text-[10px] text-slate-400 mt-0.5">{product.sku}{product.source ? ` · ${product.source}` : ''}</p>
                       <p className="text-[10px] text-slate-400 mt-0.5">{product.warehouse || '未设置仓库'} · 成本 ¥{product.price}</p>
                     </div>
@@ -193,7 +194,7 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, p
                   <p className="text-xs text-slate-500 mt-1">{selectedProduct.sku}</p>
                   <p className="text-[11px] text-slate-400 mt-1">{selectedProduct.warehouse || '未设置仓库'}</p>
                   <div className="flex items-center space-x-2 mt-2">
-                    <span className="bg-slate-100 text-slate-600 text-[10px] px-2 py-1 rounded font-medium">{selectedProduct.size}码</span>
+                    <span className="bg-slate-100 text-slate-600 text-[10px] px-2 py-1 rounded font-medium">{formatProductSize(selectedProduct.size)}</span>
                     <span className="bg-orange-50 text-orange-600 text-[10px] px-2 py-1 rounded font-medium">库存 {selectedProduct.stock}</span>
                   </div>
                </div>

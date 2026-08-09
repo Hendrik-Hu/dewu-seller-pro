@@ -5,6 +5,7 @@ import { InventoryStatsModal } from './InventoryStatsModal';
 import { AIAssistantModal } from './AIAssistantModal';
 import { AIManagementModal } from './AIManagementModal';
 import { getActivityGrossAmount, getActivityQuantity } from '../lib/inventoryMetrics';
+import { formatProductSize } from '../lib/productNormalization';
 
 interface HomeProps {
   username: string;
@@ -227,7 +228,7 @@ export const Home: React.FC<HomeProps> = ({
                          {activity.size && (
                            <>
                              <span className="mx-1.5 opacity-30">|</span>
-                             <span>{activity.size}码</span>
+                             <span>{formatProductSize(activity.size)}</span>
                            </>
                          )}
                          <span className="mx-1.5 opacity-30">|</span>

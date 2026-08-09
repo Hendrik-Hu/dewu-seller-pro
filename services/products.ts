@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabase';
 import { Product } from '../types';
 import { mapProductFromDb, mapProductToDb } from './mappers';
 import { deleteProductLocalMetadata, mergeProductsWithLocalMetadata, saveProductLocalMetadata } from './productMetadata';
+import { normalizeSku } from '../lib/productNormalization';
 
 export interface ListProductsParams {
   userId: string;
@@ -174,7 +175,7 @@ export const syncProductMainImageBySku = async (userId: string, sku: string, ima
     .from('products')
     .update({ image_url: imageUrl })
     .eq('user_id', userId)
-    .eq('sku', sku);
+    .ilike('sku', normalizeSku(sku));
 
   if (error) throw error;
 };

@@ -1,48 +1,58 @@
 import { Activity, Product, Warehouse } from '../types';
-
-const DEFAULT_WAREHOUSE_NAME = '鏉窞涓€鍙蜂粨';
+import {
+  normalizeBrand,
+  normalizeProduct,
+  normalizeOptionalStoredCost,
+  normalizeSize,
+  normalizeSku,
+  normalizeStock,
+  normalizeStoredCost,
+} from '../lib/productNormalization';
 
 export const mapProductFromDb = (row: any): Product => ({
   id: row.id,
-  name: row.name,
-  brand: row.brand,
-  size: row.size,
-  sku: row.sku,
-  price: Number(row.price) || 0,
-  stock: Number(row.stock) || 0,
+  name: String(row.name || '').trim() || normalizeSku(row.sku),
+  brand: normalizeBrand(row.brand),
+  size: normalizeSize(row.size),
+  sku: normalizeSku(row.sku),
+  price: normalizeStoredCost(row.price),
+  stock: normalizeStock(row.stock),
   imageUrl: row.image_url || row.imageUrl || '',
   status: row.status || 'instock',
   location: row.location || '',
-  warehouse: row.warehouse || DEFAULT_WAREHOUSE_NAME,
+  warehouse: String(row.warehouse || '').trim(),
   source: row.source || '',
 });
 
-export const mapProductToDb = (product: Product, userId: string) => ({
-  id: product.id,
-  name: product.name,
-  brand: product.brand,
-  size: product.size,
-  sku: product.sku,
-  price: product.price,
-  stock: product.stock,
-  image_url: product.imageUrl,
-  status: product.status,
-  location: product.location,
-  warehouse: product.warehouse,
-  source: product.source,
-  created_at: new Date().toISOString(),
-  user_id: userId,
-});
+export const mapProductToDb = (product: Product, userId: string) => {
+  const normalized = normalizeProduct(product);
+  return {
+    id: normalized.id,
+    name: normalized.name,
+    brand: normalized.brand,
+    size: normalized.size,
+    sku: normalized.sku,
+    price: normalized.price,
+    stock: normalized.stock,
+    image_url: normalized.imageUrl,
+    status: normalized.status,
+    location: normalized.location,
+    warehouse: normalized.warehouse,
+    source: normalized.source,
+    created_at: new Date().toISOString(),
+    user_id: userId,
+  };
+};
 
 export const mapActivityFromDb = (row: any): Activity => ({
   id: row.id,
   type: row.type,
   productName: row.product_name || row.productName,
   time: row.time,
-  sku: row.sku,
-  size: row.size,
-  price: Number(row.price) || 0,
-  cost: row.cost == null ? undefined : Number(row.cost),
+  sku: normalizeSku(row.sku),
+  size: row.size == null ? undefined : normalizeSize(row.size),
+  price: normalizeStoredCost(row.price),
+  cost: normalizeOptionalStoredCost(row.cost),
   imageUrl: row.image_url || row.imageUrl || '',
   createdAt: row.created_at || row.createdAt,
   created_at: row.created_at,
@@ -55,8 +65,8 @@ export const mapActivityToDb = (activity: Activity, userId: string) => ({
   type: activity.type,
   product_name: activity.productName,
   time: activity.time,
-  sku: activity.sku,
-  size: activity.size,
+  sku: normalizeSku(activity.sku),
+  size: activity.size == null ? undefined : normalizeSize(activity.size),
   price: activity.price,
   cost: activity.cost,
   image_url: activity.imageUrl,

@@ -19,6 +19,7 @@ import { outboundProduct } from './services/outbound';
 import { buildInventoryAnalytics } from './lib/inventoryMetrics';
 import { Loader2 } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
+import { formatProductSize, normalizeProduct, sameInventoryVariant } from './lib/productNormalization';
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -347,18 +348,19 @@ export default function App() {
 
   const handleAddOrUpdateProduct = async (product: Product) => {
     try {
+      const normalizedProduct = normalizeProduct(product);
       // Check for existing product with same SKU and Size (Unique constraint logic)
       const existingProduct = products.find(
-        p => p.sku === product.sku && p.size === product.size && p.id !== product.id
+        p => sameInventoryVariant(p, normalizedProduct) && p.id !== normalizedProduct.id
       );
 
-      let finalProduct = { ...product };
+      let finalProduct = { ...normalizedProduct };
       let isMerge = false;
 
       // If adding new product and duplicate found
       if (existingProduct && !editingProduct) {
         const confirmMerge = confirm(
-          `检测到仓库中已存在 [${existingProduct.sku} - ${existingProduct.size}码]。\n\n` +
+          `检测到仓库中已存在 [${existingProduct.sku} - ${formatProductSize(existingProduct.size)}]。\n\n` +
           `现有库存: ${existingProduct.stock} 件\n` +
           `现有成本: ¥${existingProduct.price}\n\n` +
           `将执行合并入库，并自动计算平均成本。是否继续？`
@@ -368,27 +370,27 @@ export default function App() {
 
         isMerge = true;
         // Weighted average price calculation
-        const totalValue = (existingProduct.price * existingProduct.stock) + (product.price * product.stock);
-        const totalStock = existingProduct.stock + product.stock;
+        const totalValue = (existingProduct.price * existingProduct.stock) + (normalizedProduct.price * normalizedProduct.stock);
+        const totalStock = existingProduct.stock + normalizedProduct.stock;
         const avgPrice = parseFloat((totalValue / totalStock).toFixed(2));
 
         finalProduct = {
           ...existingProduct,
           price: avgPrice,
           stock: totalStock,
-          location: product.location || existingProduct.location,
-          warehouse: product.warehouse || existingProduct.warehouse || '杭州一号仓',
+          location: normalizedProduct.location || existingProduct.location,
+          warehouse: normalizedProduct.warehouse || existingProduct.warehouse,
           status: 'instock'
         };
       }
 
       if (!session?.user?.id) return;
-      const uploadedImageUrl = await uploadProductImage(session.user.id, product);
+      const uploadedImageUrl = await uploadProductImage(session.user.id, normalizedProduct);
 
       finalProduct = {
         ...finalProduct,
         imageUrl: uploadedImageUrl || finalProduct.imageUrl || `https://picsum.photos/200/200?random=${Date.now()}`,
-        source: product.source || finalProduct.source || '',
+        source: normalizedProduct.source || finalProduct.source || '',
         imageDataUrl: '',
         imageFile: undefined,
       };
@@ -408,11 +410,11 @@ export default function App() {
              productName: finalProduct.name,
              sku: finalProduct.sku,
              size: finalProduct.size,
-             price: isMerge ? product.price : finalProduct.price,
-             cost: isMerge ? product.price : finalProduct.price,
+             price: isMerge ? normalizedProduct.price : finalProduct.price,
+             cost: isMerge ? normalizedProduct.price : finalProduct.price,
              imageUrl: finalProduct.imageUrl,
              warehouse: finalProduct.warehouse,
-             count: Number(product.stock),
+             count: normalizedProduct.stock,
            });
          } catch (insertActError) {
            console.error('Activity Insert Error:', insertActError);

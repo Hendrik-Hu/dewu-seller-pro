@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { X, Truck, PackageCheck, Search, CheckCircle2, Circle, Check } from 'lucide-react';
 import { Product } from '../types';
+import { formatProductSize } from '../lib/productNormalization';
 
 interface PendingOrdersModalProps {
   isOpen: boolean;
@@ -147,7 +148,7 @@ export const PendingOrdersModal: React.FC<PendingOrdersModalProps> = ({ isOpen, 
                 <div className="flex-1 min-w-0">
                   <h4 className="text-xs font-bold text-slate-900 line-clamp-2">{product.name}</h4>
                   <div className="flex items-center space-x-2 mt-1">
-                     <span className="bg-slate-100 text-slate-500 text-[10px] px-1.5 py-0.5 rounded">{product.size}码</span>
+                     <span className="bg-slate-100 text-slate-500 text-[10px] px-1.5 py-0.5 rounded">{formatProductSize(product.size)}</span>
                      <span className="text-[10px] text-slate-400">货号: {product.sku}</span>
                   </div>
                   <div className="mt-1 text-[10px] text-slate-400">

@@ -3,6 +3,7 @@ import { Camera, Loader2, Save, Sparkles, Trash2, X } from 'lucide-react';
 import { Preferences } from '@capacitor/preferences';
 import { Product, Warehouse } from '../types';
 import { supabase } from '../lib/supabase';
+import { normalizeBrand, normalizeSize, normalizeSku } from '../lib/productNormalization';
 
 interface AddProductModalProps {
   isOpen: boolean;
@@ -255,14 +256,26 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       return;
     }
 
+    const cost = Number(productData.price);
+    if (!Number.isFinite(cost) || cost < 0) {
+      alert('成本必须是大于或等于 0 的有效数字');
+      return;
+    }
+
+    const stock = Number(productData.stock);
+    if (!Number.isInteger(stock) || stock <= 0) {
+      alert('入库数量必须是大于 0 的整数');
+      return;
+    }
+
     const product: Product = {
       id: initialData?.id || Date.now().toString(),
-      name: productData.name || 'Unknown',
-      brand: productData.brand || 'Unknown',
-      size: productData.size || '均码',
-      sku: productData.sku || 'N/A',
-      price: Number(productData.price) || 0,
-      stock: Number(productData.stock) || 0,
+      name: String(productData.name || '').trim() || normalizeSku(productData.sku),
+      brand: normalizeBrand(productData.brand),
+      size: normalizeSize(productData.size),
+      sku: normalizeSku(productData.sku),
+      price: cost,
+      stock,
       imageUrl: productData.imageUrl || '',
       imageDataUrl: productData.imageDataUrl || '',
       imageFile: selectedImageFile || undefined,
