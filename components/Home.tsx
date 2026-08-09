@@ -220,9 +220,13 @@ export const Home: React.FC<HomeProps> = ({
                   <div className="flex justify-between items-end mt-1">
                     <div className="flex items-center space-x-2">
                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                         activity.type === 'inbound' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400'
+                         activity.type === 'inbound'
+                           ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+                           : activity.type === 'restore'
+                             ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400'
+                             : 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400'
                        }`}>
-                         {activity.type === 'inbound' ? '入库' : '出库'}
+                         {activity.type === 'inbound' ? '入库' : activity.type === 'restore' ? '恢复' : '出库'}
                        </span>
                        <div className="flex items-center text-xs text-slate-500 dark:text-zinc-400">
                          <span>{activity.sku}</span>
@@ -236,12 +240,12 @@ export const Home: React.FC<HomeProps> = ({
                          <span>x{activity.count || 1}</span>
                        </div>
                     </div>
-                    <div className="text-right">
+                    {activity.type !== 'restore' && <div className="text-right">
                       <span className="text-sm font-bold text-dewu-600 dark:text-dewu-400">¥{getActivityGrossAmount(activity)}</span>
                       {getActivityQuantity(activity) > 1 && (
                         <div className="text-[10px] text-slate-400 dark:text-zinc-500">单价 ¥{activity.price}</div>
                       )}
-                    </div>
+                    </div>}
                   </div>
                 </div>
               </div>
