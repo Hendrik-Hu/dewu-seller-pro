@@ -172,11 +172,11 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
 
   const handleBatchDelete = async () => {
     if (selectedProductIds.length === 0) {
-      alert('请先勾选要删除的商品');
+      alert('请先勾选要移入回收站的商品');
       return;
     }
 
-    const confirmed = window.confirm(`确定要批量删除已勾选的 ${selectedProductIds.length} 个商品吗？`);
+    const confirmed = window.confirm(`确定要将已勾选的 ${selectedProductIds.length} 个商品移入回收站吗？`);
     if (!confirmed) return;
 
     setIsBatchDeleting(true);
@@ -258,6 +258,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
             .from('products')
             .select('price, stock, warehouse')
             .eq('user_id', userId)
+            .is('deleted_at', null)
             .eq('status', 'instock');
         
         if (data) {
@@ -721,7 +722,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                   disabled={selectedProductIds.length === 0 || isBatchDeleting}
                   className="rounded-lg bg-red-500 px-3 py-1.5 text-[11px] font-medium text-white disabled:opacity-50"
                 >
-                  {isBatchDeleting ? '删除中...' : `批量删除${selectedProductIds.length > 0 ? ` (${selectedProductIds.length})` : ''}`}
+                  {isBatchDeleting ? '正在移入...' : `移入回收站${selectedProductIds.length > 0 ? ` (${selectedProductIds.length})` : ''}`}
                 </button>
               </div>
             </div>
@@ -860,7 +861,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                         <button 
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (window.confirm(`确定要删除 ${product.name} 吗？`)) {
+                            if (window.confirm(`确定要将 ${product.name} 移入回收站吗？`)) {
                                 onDeleteProduct(product.id);
                                 setActiveProductId(null);
                             }
@@ -870,7 +871,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                            <div className="p-3 bg-red-500/20 rounded-full text-red-500 group-active:bg-red-500/30 transition-colors mb-1">
                             <Trash2 size={20} />
                           </div>
-                          <span className="text-[10px] font-medium text-red-500">删除</span>
+                          <span className="text-[10px] font-medium text-red-500">回收站</span>
                         </button>
 
                         <button 

@@ -24,6 +24,7 @@ export const mapProductFromDb = (row: any): Product => ({
   location: row.location || '',
   warehouse: String(row.warehouse || '').trim(),
   source: row.source || '',
+  deletedAt: row.deleted_at || undefined,
 });
 
 export const mapProductToDb = (product: Product, userId: string) => {
@@ -41,6 +42,7 @@ export const mapProductToDb = (product: Product, userId: string) => {
     location: normalized.location,
     warehouse: normalized.warehouse,
     source: normalized.source,
+    deleted_at: normalized.deletedAt || null,
     created_at: new Date().toISOString(),
     user_id: userId,
   };

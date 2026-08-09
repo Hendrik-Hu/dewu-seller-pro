@@ -17,6 +17,7 @@ export interface Product {
   stock: number;
   imageUrl: string;
   imageStorageRef?: string;
+  deletedAt?: string;
   status: 'instock' | 'shipping' | 'sold' | 'flaw';
   location?: string;
   warehouse?: string;

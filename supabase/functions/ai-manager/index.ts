@@ -750,6 +750,7 @@ const executeInbound = async (db: any, userId: string, input: Record<string, unk
     .from("products")
     .select("*")
     .eq("user_id", userId)
+    .is("deleted_at", null)
     .ilike("sku", sku)
     .eq("warehouse", warehouse)
     .order("created_at", { ascending: false })
@@ -851,6 +852,7 @@ const executeOutbound = async (db: any, userDb: any, userId: string, input: Reco
     .from("products")
     .select("*")
     .eq("user_id", userId)
+    .is("deleted_at", null)
     .ilike("sku", sku)
     .gt("stock", 0)
     .order("created_at", { ascending: false })
@@ -1036,7 +1038,7 @@ serve(async (req) => {
     if (claimError?.code === "23505") {
       const { data: previous } = await db
         .from("ai_plan_executions")
-        .select("status, result")
+        .select("status, result, created_at")
         .eq("plan_id", envelope.planId)
         .eq("user_id", authData.user.id)
         .maybeSingle();
@@ -1046,6 +1048,26 @@ serve(async (req) => {
           ...previous.result,
           reply: `该计划已经执行过，本次没有重复修改库存。\n${toText(previous.result.reply)}`,
           alreadyExecuted: true,
+        });
+      }
+
+      const processingAgeMs = previous?.created_at ? Date.now() - Date.parse(previous.created_at) : 0;
+      if (previous?.status === "processing" && processingAgeMs >= 2 * 60 * 1000) {
+        return jsonResponse({
+          reply: "该计划的执行结果未能完成登记，系统不会自动重试，以免重复修改库存。请到首页最近动态逐项核对入库或出库流水，再根据实际差异生成新的计划。",
+          actions: [{
+            type: "audit",
+            status: "failed",
+            summary: `计划 ${envelope.planId} 的状态未知，需要人工核对最近动态。`,
+          }],
+          plannedActions: [],
+          planToken: null,
+          requiresConfirmation: false,
+          executionConfirmed: false,
+          dryRun: false,
+          executed: false,
+          executable: false,
+          executionUnknown: true,
         });
       }
 

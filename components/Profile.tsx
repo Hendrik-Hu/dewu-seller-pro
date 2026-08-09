@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Settings, Bell, Shield, CircleHelp, ChevronRight, LogOut, Edit2, Check, X, Camera, Moon, LayoutGrid, ToggleLeft, ToggleRight } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { ArchiveRestore, ChevronRight, LogOut, Edit2, Check, X, Camera, Moon, LayoutGrid, ToggleLeft, ToggleRight, Shield, Download } from 'lucide-react';
 
 import { AccountSecurityModal } from './AccountSecurityModal';
 
@@ -23,6 +23,9 @@ interface ProfileProps {
   onLogout: () => void;
   email?: string;
   onWidgetClick: () => void;
+  onRecycleBinClick: () => void;
+  onExportClick: () => void;
+  appVersion: string;
 }
 
 export const Profile: React.FC<ProfileProps> = ({ 
@@ -37,7 +40,10 @@ export const Profile: React.FC<ProfileProps> = ({
   onToggleTheme,
   onLogout,
   email,
-  onWidgetClick
+  onWidgetClick,
+  onRecycleBinClick,
+  onExportClick,
+  appVersion,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(username);
@@ -50,7 +56,8 @@ export const Profile: React.FC<ProfileProps> = ({
 
   const menuGroups: MenuItem[][] = [
     [
-      { icon: Bell, label: '消息通知', value: '2条未读' },
+      { icon: ArchiveRestore, label: '回收站', action: onRecycleBinClick },
+      { icon: Download, label: '导出库存快照', action: onExportClick },
     ],
     [
       { 
@@ -61,8 +68,6 @@ export const Profile: React.FC<ProfileProps> = ({
       },
       { icon: LayoutGrid, label: '小组件管理', action: onWidgetClick },
       { icon: Shield, label: '账号安全', action: () => setShowSecurityModal(true) },
-      { icon: Settings, label: '通用设置', action: () => alert('清理缓存成功！') },
-      { icon: CircleHelp, label: '帮助中心' },
     ]
   ];
 
@@ -149,12 +154,7 @@ export const Profile: React.FC<ProfileProps> = ({
               )}
             </div>
             
-            <div className="flex items-center mt-1 space-x-2">
-              <span className="px-2 py-0.5 bg-dewu-50 dark:bg-dewu-900/30 text-dewu-600 dark:text-dewu-400 text-[10px] font-bold rounded border border-dewu-100 dark:border-dewu-800">
-                PRO MERCHANT
-              </span>
-              <span className="text-xs text-slate-400 dark:text-zinc-500">ID: 88482024</span>
-            </div>
+            {email && <p className="mt-1 truncate text-xs text-slate-400 dark:text-zinc-500">{email}</p>}
           </div>
         </div>
         
@@ -215,7 +215,7 @@ export const Profile: React.FC<ProfileProps> = ({
           <span>退出登录</span>
         </button>
 
-        <p className="text-center text-[10px] text-slate-300 dark:text-zinc-600">Version 1.0.0 · Developed for Dewu Sellers</p>
+        <p className="text-center text-[10px] text-slate-300 dark:text-zinc-600">Version {appVersion}</p>
       </div>
 
       <AccountSecurityModal 
