@@ -9,6 +9,8 @@ declare
   v_first jsonb;
   v_replay jsonb;
   v_second jsonb;
+  v_zero jsonb;
+  v_other_user uuid:=extensions.gen_random_uuid();
   v_failed boolean;
 begin
   select id into v_user from auth.users order by created_at limit 1;
@@ -28,6 +30,11 @@ begin
   if (v_second->>'settlement_revision')::integer<>2 then raise exception 'Correction revision failed'; end if;
   if not exists(select 1 from public.outbound_settlement_audit where user_id=v_user and activity_id=v_activity_id and revision=2 and previous_snapshot->>'actualPlatformFee'='250.00') then raise exception 'Correction history is incomplete'; end if;
 
+  v_zero:=public.settle_outbound_activity(v_user,v_activity_id,v_operation_id||'-zero',0,now(),'ORDER-1','零费用核对');
+  if (v_zero->>'actual_platform_fee')::numeric<>0 or (v_zero->>'actual_net_proceeds')::numeric<>200 or (v_zero->>'settlement_revision')::integer<>3 then
+    raise exception 'Explicit zero settlement fee was not preserved';
+  end if;
+
   v_failed:=false;
   begin perform public.settle_outbound_activity(v_user,v_activity_id,v_operation_id,20,now(),'ORDER-1','changed');
   exception when others then v_failed:=sqlerrm like '%different data%'; end;
@@ -38,8 +45,15 @@ begin
   exception when others then v_failed:=sqlerrm like '%earlier than outbound%'; end;
   if not v_failed then raise exception 'Settlement before outbound was accepted'; end if;
 
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',v_other_user,'role','authenticated')::text,true);
   v_failed:=false;
-  begin update public.activities set actual_platform_fee=0 where id=v_activity_id;
+  begin perform public.settle_outbound_activity(v_user,v_activity_id,v_operation_id||'-other-user',0,now(),null,null);
+  exception when others then v_failed:=sqlerrm like '%Unauthorized%'; end;
+  if not v_failed then raise exception 'A different authenticated user could settle another user activity'; end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',v_user,'role','authenticated')::text,true);
+
+  v_failed:=false;
+  begin update public.activities set actual_platform_fee=1 where id=v_activity_id;
   exception when others then v_failed:=sqlerrm like '%settlement RPC%'; end;
   if not v_failed then raise exception 'Direct settlement update was accepted'; end if;
 
