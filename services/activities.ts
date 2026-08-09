@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { Activity } from '../types';
 import { mapActivityFromDb, mapActivityToDb } from './mappers';
+import { resolveStorageImageUrl } from './storageImages';
 
 export const listActivities = async (userId: string): Promise<Activity[]> => {
   const { data, error } = await supabase
@@ -10,7 +11,10 @@ export const listActivities = async (userId: string): Promise<Activity[]> => {
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return (data || []).map(mapActivityFromDb);
+  return Promise.all((data || []).map(async (row) => {
+    const activity = mapActivityFromDb(row);
+    return { ...activity, imageUrl: await resolveStorageImageUrl(activity.imageStorageRef || activity.imageUrl) };
+  }));
 };
 
 export const insertActivity = async (activity: Activity, userId: string) => {

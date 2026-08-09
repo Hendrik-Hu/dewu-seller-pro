@@ -4,6 +4,7 @@ import { Product, Warehouse } from '../types';
 import { supabase } from '../lib/supabase';
 import { listProducts } from '../services/products';
 import { formatProductSize, normalizeSize, normalizeSku } from '../lib/productNormalization';
+import { ProductImage } from './ProductImage';
 
 interface ProductListProps {
   userId: string;
@@ -757,7 +758,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                     className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-slate-100 dark:border-zinc-800 shadow-sm space-y-3"
                   >
                     <div className="flex space-x-3">
-                      <img src={group.imageUrl} alt={group.name} className="w-14 h-14 rounded-lg object-cover bg-slate-100 dark:bg-zinc-800 flex-shrink-0" />
+                      <ProductImage src={group.imageUrl} alt={group.name} className="w-14 h-14 rounded-lg object-cover bg-slate-100 dark:bg-zinc-800 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
@@ -897,7 +898,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                     )}
 
                     <div className="relative flex-shrink-0">
-                      <img src={product.imageUrl} alt={product.name} className="w-14 h-14 rounded-lg object-cover bg-slate-100 dark:bg-zinc-800" />
+                      <ProductImage src={product.imageUrl} alt={product.name} className="w-14 h-14 rounded-lg object-cover bg-slate-100 dark:bg-zinc-800" />
                       {(product.stock <= 0 || product.status === 'sold') && (
                         <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center">
                           <span className="text-white text-[10px] font-bold">SOLD</span>

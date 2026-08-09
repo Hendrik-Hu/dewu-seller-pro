@@ -16,6 +16,7 @@ export interface Product {
   price: number;
   stock: number;
   imageUrl: string;
+  imageStorageRef?: string;
   status: 'instock' | 'shipping' | 'sold' | 'flaw';
   location?: string;
   warehouse?: string;
@@ -34,6 +35,7 @@ export interface Activity {
   price: number; // For outbound, this is the SELLING PRICE
   cost?: number; // For outbound, this is the COST PRICE (for profit calc)
   imageUrl: string;
+  imageStorageRef?: string;
   createdAt: string; // CamelCase for internal usage
   created_at?: string; // SnakeCase for DB compatibility
   warehouse?: string;

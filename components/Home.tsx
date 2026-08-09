@@ -6,6 +6,7 @@ import { AIAssistantModal } from './AIAssistantModal';
 import { AIManagementModal } from './AIManagementModal';
 import { getActivityGrossAmount, getActivityQuantity } from '../lib/inventoryMetrics';
 import { formatProductSize } from '../lib/productNormalization';
+import { ProductImage } from './ProductImage';
 
 interface HomeProps {
   username: string;
@@ -207,7 +208,7 @@ export const Home: React.FC<HomeProps> = ({
           ) : (
             activities.slice(0, 10).map((activity) => (
               <div key={activity.id} className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-slate-100 dark:border-zinc-800 shadow-sm flex items-center space-x-3">
-                <img src={activity.imageUrl} alt={activity.productName} className="w-12 h-12 rounded-lg object-cover bg-slate-100 dark:bg-zinc-800" />
+                <ProductImage src={activity.imageUrl} alt={activity.productName} className="w-12 h-12 rounded-lg object-cover bg-slate-100 dark:bg-zinc-800" />
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-start">
                     <h4 className="text-sm font-semibold text-slate-900 dark:text-white line-clamp-1">{activity.productName}</h4>

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { X, Truck, PackageCheck, Search, CheckCircle2, Circle, Check } from 'lucide-react';
 import { Product } from '../types';
 import { formatProductSize } from '../lib/productNormalization';
+import { ProductImage } from './ProductImage';
 
 interface PendingOrdersModalProps {
   isOpen: boolean;
@@ -144,7 +145,7 @@ export const PendingOrdersModal: React.FC<PendingOrdersModalProps> = ({ isOpen, 
                     <Circle size={18} className="text-slate-300" />
                   )}
                 </div>
-                <img src={product.imageUrl} alt={product.name} className="w-16 h-16 rounded-lg object-cover bg-slate-100" />
+                <ProductImage src={product.imageUrl} alt={product.name} className="w-16 h-16 rounded-lg object-cover bg-slate-100" />
                 <div className="flex-1 min-w-0">
                   <h4 className="text-xs font-bold text-slate-900 line-clamp-2">{product.name}</h4>
                   <div className="flex items-center space-x-2 mt-1">

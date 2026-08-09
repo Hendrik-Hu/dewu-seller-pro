@@ -3,6 +3,7 @@ import { Product } from '../types';
 import { mapProductFromDb, mapProductToDb } from './mappers';
 import { deleteProductLocalMetadata, mergeProductsWithLocalMetadata, saveProductLocalMetadata } from './productMetadata';
 import { normalizeSku } from '../lib/productNormalization';
+import { resolveStorageImageUrl } from './storageImages';
 
 export interface ListProductsParams {
   userId: string;
@@ -55,8 +56,13 @@ export const listProducts = async ({
 
   if (error) throw error;
 
+  const products = await Promise.all((data || []).map(async (row) => {
+    const product = mapProductFromDb(row);
+    return { ...product, imageUrl: await resolveStorageImageUrl(product.imageStorageRef || product.imageUrl) };
+  }));
+
   return {
-    products: await mergeProductsWithLocalMetadata(userId, (data || []).map(mapProductFromDb)),
+    products: await mergeProductsWithLocalMetadata(userId, products),
     totalCount: count || 0,
   };
 };
@@ -69,7 +75,11 @@ export const listAllProducts = async (userId: string): Promise<Product[]> => {
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return mergeProductsWithLocalMetadata(userId, (data || []).map(mapProductFromDb));
+  const products = await Promise.all((data || []).map(async (row) => {
+    const product = mapProductFromDb(row);
+    return { ...product, imageUrl: await resolveStorageImageUrl(product.imageStorageRef || product.imageUrl) };
+  }));
+  return mergeProductsWithLocalMetadata(userId, products);
 };
 
 export const getWarehouseProductSummary = async (userId: string, warehouse: string) => {
