@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Calculator, Clock3, History, Loader2, X } from 'lucide-react';
+import { Calculator, Clock3, History, Loader2, RefreshCw, X } from 'lucide-react';
 import { Preferences } from '@capacitor/preferences';
 import type { Activity, OutboundSettlementAudit } from '../types';
 import { calculateSettlementPreview, normalizeSettlementFee } from '../lib/settlementCalculations';
@@ -29,11 +29,19 @@ export const SettlementModal: React.FC<SettlementModalProps> = ({ activity, user
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
+  const [initKey, setInitKey] = useState(0);
 
   useEffect(() => {
     if (!activity) return;
     let mounted = true;
     setReady(false);
+    setFee('');
+    setSettledAt('');
+    setOrderNo('');
+    setNote('');
+    setAudits([]);
+    setError('');
+    setOperationId(createOperationId());
     Promise.all([
       Preferences.get({ key: draftKey(userId, activity.id) }),
       listOutboundSettlementAudit(userId, activity.id),
@@ -46,10 +54,14 @@ export const SettlementModal: React.FC<SettlementModalProps> = ({ activity, user
       setNote(String(draft?.note ?? activity.settlementNote ?? ''));
       setOperationId(String(draft?.operationId || createOperationId()));
       setAudits(history);
-    }).catch((caught) => setError(caught instanceof Error ? caught.message : '结算记录加载失败'))
-      .finally(() => { if (mounted) setReady(true); });
+      if (mounted) setReady(true);
+    }).catch((caught) => {
+      if (!mounted) return;
+      setError(caught instanceof Error ? caught.message : '结算记录加载失败');
+      setReady(false);
+    });
     return () => { mounted = false; };
-  }, [activity, userId]);
+  }, [activity, initKey, userId]);
 
   useEffect(() => {
     if (!activity || !ready) return;
@@ -92,7 +104,7 @@ export const SettlementModal: React.FC<SettlementModalProps> = ({ activity, user
         <button onClick={close} className="p-2 text-slate-400" aria-label="关闭实际结算"><X size={20} /></button>
       </header>
 
-      {!ready ? <div className="flex justify-center py-12"><Loader2 className="animate-spin text-slate-400" /></div> : <div className="space-y-3">
+      {!ready ? (error ? <div className="flex flex-col items-center py-10 text-center"><p className="mb-3 text-sm text-red-600">{error}</p><button onClick={() => setInitKey((value) => value + 1)} className="flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-2 text-xs text-white"><RefreshCw size={13} />重新加载</button></div> : <div className="flex justify-center py-12"><Loader2 className="animate-spin text-slate-400" /></div>) : <div className="space-y-3">
         <div className="rounded-xl bg-slate-50 p-3 text-xs dark:bg-zinc-800">
           <div className="flex justify-between"><span className="text-slate-500">成交总额</span><strong>¥{(activity.price * (activity.count ?? 1)).toFixed(2)}</strong></div>
           <div className="mt-1 flex justify-between"><span className="text-slate-500">出库冻结成本</span><strong>{activity.cost == null ? '未记录' : `¥${(activity.cost * (activity.count ?? 1)).toFixed(2)}`}</strong></div>
