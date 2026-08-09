@@ -1,10 +1,10 @@
 {
-  "name": "得物卖家助手",
-  "short_name": "得物助手",
+  "name": "卖家库存助手",
+  "short_name": "库存助手",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#000000",
+  "background_color": "#f8fafc",
+  "theme_color": "#14b8a6",
   "orientation": "portrait",
   "icons": [
     {

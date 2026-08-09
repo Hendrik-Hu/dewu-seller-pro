@@ -1,7 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { ArchiveRestore, Calculator, ChevronRight, LogOut, Edit2, Check, X, Camera, Moon, LayoutGrid, ToggleLeft, ToggleRight, Shield, Download, UserRound, ShieldAlert } from 'lucide-react';
+import { ArchiveRestore, Calculator, ChevronRight, LogOut, Edit2, Check, X, Camera, Moon, ToggleLeft, ToggleRight, Shield, Download, UserRound, ShieldAlert } from 'lucide-react';
 
 import { AccountSecurityModal } from './AccountSecurityModal';
+import { APP_DISCLAIMER, APP_NAME } from '../lib/brand';
+import { openExternalUrl, PUBLIC_LINKS } from '../lib/publicLinks';
 
 interface MenuItem {
   icon: React.ElementType;
@@ -22,7 +24,6 @@ interface ProfileProps {
   onToggleTheme: () => void;
   onLogout: () => void;
   email?: string;
-  onWidgetClick: () => void;
   onRecycleBinClick: () => void;
   onExportClick: () => void;
   onDataHealthClick: () => void;
@@ -43,7 +44,6 @@ export const Profile: React.FC<ProfileProps> = ({
   onToggleTheme,
   onLogout,
   email,
-  onWidgetClick,
   onRecycleBinClick,
   onExportClick,
   onDataHealthClick,
@@ -79,7 +79,6 @@ export const Profile: React.FC<ProfileProps> = ({
         value: isDarkMode ? <ToggleRight className="text-dewu-500" size={24} /> : <ToggleLeft className="text-slate-300" size={24} />,
         action: onToggleTheme
       },
-      { icon: LayoutGrid, label: '小组件管理', action: onWidgetClick },
       { icon: Shield, label: '账号安全', action: () => setShowSecurityModal(true) },
     ]
   ];
@@ -101,14 +100,16 @@ export const Profile: React.FC<ProfileProps> = ({
   };
 
   const handleSaveName = () => {
-    // Regex: exactly 4 Chinese characters
-    const chineseRegex = /^[\u4e00-\u9fa5]{4}$/;
-    
-    if (chineseRegex.test(tempName)) {
-      onUpdateName(tempName);
+    const normalizedName = tempName.trim().replace(/\s+/g, ' ');
+    const isValidName = normalizedName.length >= 2
+      && normalizedName.length <= 20
+      && !/[<>\r\n\t]/.test(normalizedName);
+
+    if (isValidName) {
+      onUpdateName(normalizedName);
       setIsEditing(false);
     } else {
-      alert("用户名格式错误：请输入四个字的中文");
+      alert('用户名需为 2–20 个字符，且不能包含换行或尖括号');
     }
   };
 
@@ -232,12 +233,17 @@ export const Profile: React.FC<ProfileProps> = ({
           <span>退出登录</span>
         </button>
 
-        <p className="text-center text-[10px] text-slate-300 dark:text-zinc-600">Version {appVersion}</p>
+        <div className="text-center text-[10px] leading-4 text-slate-400 dark:text-zinc-600">
+          <p>{APP_NAME} · Version {appVersion}</p>
+          <p>{APP_DISCLAIMER}</p>
+          <div className="mt-1 flex justify-center gap-3"><button onClick={() => openExternalUrl(PUBLIC_LINKS.privacy)} className="underline">隐私说明</button><button onClick={() => openExternalUrl(PUBLIC_LINKS.accountDeletion)} className="underline">账号删除说明</button><button onClick={() => openExternalUrl(PUBLIC_LINKS.support)} className="underline">支持</button></div>
+        </div>
       </div>
 
       <AccountSecurityModal 
         isOpen={showSecurityModal}
         onClose={() => setShowSecurityModal(false)}
+        onAccountDeleted={onLogout}
         email={email}
       />
 

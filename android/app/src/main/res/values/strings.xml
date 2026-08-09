@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">DewuSellerPro</string>
-    <string name="title_activity_main">DewuSellerPro</string>
-    <string name="package_name">com.dewu.sellerpro</string>
-    <string name="custom_url_scheme">com.dewu.sellerpro</string>
+    <string name="app_name">卖家库存助手</string>
+    <string name="title_activity_main">卖家库存助手</string>
+    <string name="package_name">com.hendrikhu.sellerinventory</string>
+    <string name="custom_url_scheme">com.hendrikhu.sellerinventory</string>
 </resources>

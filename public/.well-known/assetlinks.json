@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.hendrikhu.sellerinventory",
+      "sha256_cert_fingerprints": [
+        "4B:07:93:70:7C:76:CC:CA:3F:4A:5A:2D:84:91:1E:3B:36:A9:C8:33:AA:C4:1F:47:24:41:90:2E:10:B8:A8:85"
+      ]
+    }
+  }
+]

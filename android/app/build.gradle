@@ -1,24 +1,43 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace "com.dewu.sellerpro"
+    namespace "com.hendrikhu.sellerinventory"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.dewu.sellerpro"
+        applicationId "com.hendrikhu.sellerinventory"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode 9
+        versionName "0.9.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        manifestPlaceholders = [recoveryHost: System.getenv("SELLER_INVENTORY_RECOVERY_HOST") ?: "invalid.example"]
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            def keystorePath = System.getenv("SELLER_INVENTORY_KEYSTORE")
+            def keystorePassword = System.getenv("SELLER_INVENTORY_STORE_PASSWORD")
+            def keyAliasValue = System.getenv("SELLER_INVENTORY_KEY_ALIAS")
+            def keyPasswordValue = System.getenv("SELLER_INVENTORY_KEY_PASSWORD")
+            if (keystorePath && keystorePassword && keyAliasValue && keyPasswordValue) {
+                storeFile file(keystorePath)
+                storePassword keystorePassword
+                keyAlias keyAliasValue
+                keyPassword keyPasswordValue
+            }
+        }
+    }
     buildTypes {
         release {
-            minifyEnabled false
+            if (signingConfigs.release.storeFile != null) {
+                signingConfig signingConfigs.release
+            }
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
         debug {

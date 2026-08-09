@@ -1,12 +1,17 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
+import { APP_DISCLAIMER, APP_NAME } from '../lib/brand';
+import { Capacitor } from '@capacitor/core';
+import { PUBLIC_LINKS } from '../lib/publicLinks';
 
 interface AuthScreenProps {
   onAuthSuccess: () => void;
+  isPasswordRecovery?: boolean;
+  onRecoveryComplete?: () => void;
 }
 
-export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
+export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, isPasswordRecovery = false, onRecoveryComplete }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [isResetPassword, setIsResetPassword] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -15,6 +20,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState('');
 
   const getAuthErrorMessage = (error: any, fallback: string) => {
     const message = String(error?.message || '').trim();
@@ -72,7 +78,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
     setLoading(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin, // Reset link redirects back to app
+        redirectTo: Capacitor.isNativePlatform()
+          ? PUBLIC_LINKS.passwordRecovery
+          : new URL('/auth/recovery', window.location.origin).toString(),
       });
       if (error) throw error;
       alert('重置邮件已发送！请检查您的邮箱（包括垃圾邮件文件夹）。');
@@ -84,6 +92,48 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
       setLoading(false);
     }
   };
+
+  const handleRecoveryPassword = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (password.length < 8) return alert('新密码至少需要 8 位');
+    if (password !== confirmPassword) return alert('两次输入的新密码不一致');
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
+      await supabase.auth.signOut();
+      setPassword('');
+      setConfirmPassword('');
+      alert('密码已更新，请使用新密码重新登录');
+      onRecoveryComplete?.();
+    } catch (error: any) {
+      alert(getAuthErrorMessage(error, '密码更新失败，请重新打开邮件中的链接'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (isPasswordRecovery) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 p-6 dark:bg-black">
+        <div className="w-full max-w-sm rounded-2xl border border-slate-100 bg-white p-8 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
+          <h1 className="mb-2 text-center text-2xl font-bold text-slate-900 dark:text-white">设置新密码</h1>
+          <p className="mb-7 text-center text-sm text-slate-500">恢复链接已验证，请设置新的登录密码</p>
+          <form onSubmit={handleRecoveryPassword} className="space-y-4">
+            <label className="block text-sm text-slate-600 dark:text-zinc-300">新密码
+              <input type="password" required minLength={8} autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-dewu-500 dark:border-zinc-700 dark:bg-zinc-800" />
+            </label>
+            <label className="block text-sm text-slate-600 dark:text-zinc-300">确认新密码
+              <input type="password" required minLength={8} autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-dewu-500 dark:border-zinc-700 dark:bg-zinc-800" />
+            </label>
+            <button type="submit" disabled={loading} className="flex w-full items-center justify-center rounded-xl bg-slate-900 py-3 font-bold text-white disabled:opacity-50 dark:bg-dewu-500">
+              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : '更新密码'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -240,8 +290,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
             {isLogin ? '欢迎回来' : '创建账号'}
           </h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm">
-            得物卖家专业版 - 库存管理助手
+            {APP_NAME}
           </p>
+          <p className="mt-2 text-[11px] text-slate-400 dark:text-zinc-500">{APP_DISCLAIMER}</p>
         </div>
 
         <form onSubmit={handleAuth} className="space-y-4">

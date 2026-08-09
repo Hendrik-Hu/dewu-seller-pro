@@ -1,6 +1,6 @@
-# Dewu Seller Pro
+# 卖家库存助手
 
-得物卖家库存管理与 AI 经营助手。项目面向移动端使用，支持商品入库、出库、仓库管理、库存统计、经营数据图表，以及通过 Supabase Edge Function 生成可确认、可追踪的 AI 分析与库存操作计划。
+个人卖家自用库存工具，非得物官方产品。项目面向移动端使用，支持商品入库、出库、仓库管理、库存统计、经营数据图表，以及通过 Supabase Edge Function 生成可确认、可追踪的 AI 分析与库存操作计划。
 
 ## Tech Stack
 
@@ -37,6 +37,7 @@
    ```env
    VITE_SUPABASE_URL=
    VITE_SUPABASE_ANON_KEY=
+   VITE_PUBLIC_SITE_URL=https://你的正式公开站点
    ```
 
 3. 启动前端
@@ -59,8 +60,11 @@ npm run build          # Build web app to dist/
 npm run preview        # Preview production build
 npm run typecheck      # Run TypeScript checks
 npm run android:sync   # Build and sync Capacitor Android project
-.\build_apk.ps1        # Build Android debug APK
+.\build_debug_apk.ps1  # Build Android debug test APK
+.\build_release_android.ps1 # Build signed Release APK and AAB
 ```
+
+Android 同步会校验 `VITE_PUBLIC_SITE_URL`。它必须是已验证可公开访问的 HTTPS 站点，并提供 `/privacy.html`、`/account-deletion.html` 与 `/auth/recovery`；缺失或使用本机地址时构建会停止。
 
 如果 Windows 全局没有 `npm`，项目里的 PowerShell 脚本会优先使用本地 `node-v20.11.0-win-x64`。
 

@@ -890,7 +890,7 @@ serve(async (req) => {
       }
       const agentPayload = {
         systemPrompt: [
-          "你是得物卖家库存管理代理。",
+          "你是个人卖家库存管理助手。得物只是用户可能选择的交易平台字段，不代表官方身份。",
           "你的职责是把用户自然语言转换成结构化动作，不要直接声称已经执行数据库操作。",
           "你只能返回 JSON，格式为 {\"reply\":\"...\",\"actions\":[...]}。",
           "actions 仅支持 inbound、outbound、answer。",

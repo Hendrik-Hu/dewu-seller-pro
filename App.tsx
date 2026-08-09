@@ -14,8 +14,6 @@ import { FeeSchemeModal } from './components/FeeSchemeModal';
 import { AddProductModal } from './components/AddProductModal';
 import { OutboundModal } from './components/OutboundModal';
 import { PendingOrdersModal } from './components/PendingOrdersModal';
-import { WidgetSettingsModal } from './components/WidgetSettingsModal';
-import { updateWidgetData } from './utils/widget';
 import { Tab, Product, Activity, Warehouse, OutboundFeeSelection } from './types';
 import { supabase } from './lib/supabase';
 import { createInventoryActivity, listActivities } from './services/activities';
@@ -24,11 +22,15 @@ import { outboundProduct } from './services/outbound';
 import { buildInventoryAnalytics } from './lib/inventoryMetrics';
 import { Loader2 } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
+import { App as CapacitorApp } from '@capacitor/app';
+import { parseRecoveryUrl } from './lib/authRecovery';
 import { formatProductSize, normalizeProduct, sameInventoryVariant } from './lib/productNormalization';
 import { createProductImageRef, isProductImageRef } from './services/storageImages';
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const [showWelcome, setShowWelcome] = useState(true);
   const [currentTab, setCurrentTab] = useState<Tab>(Tab.HOME);
   const [isLoading, setIsLoading] = useState(false);
@@ -40,22 +42,49 @@ export default function App() {
 
   // Theme State
   const [isDarkMode, setIsDarkMode] = useState(() => {
-    return localStorage.getItem('dewu_theme') === 'dark';
+    return (localStorage.getItem('seller_inventory_theme') || localStorage.getItem('dewu_theme')) === 'dark';
   });
 
   // Auth Effect
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+      setIsAuthReady(true);
     });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
+      if (event === 'PASSWORD_RECOVERY') setIsPasswordRecovery(true);
+      if (event === 'SIGNED_OUT') setIsPasswordRecovery(false);
+      setIsAuthReady(true);
     });
 
     return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    let removed = false;
+    const handleRecoveryUrl = async (url: string) => {
+      const payload = parseRecoveryUrl(url);
+      if (!payload) return;
+      const result = payload.code
+        ? await supabase.auth.exchangeCodeForSession(payload.code)
+        : await supabase.auth.setSession({ access_token: payload.accessToken!, refresh_token: payload.refreshToken! });
+      if (!result.error && !removed) {
+        setSession(result.data.session);
+        setIsPasswordRecovery(true);
+        setIsAuthReady(true);
+      }
+    };
+
+    const listenerPromise = CapacitorApp.addListener('appUrlOpen', ({ url }) => handleRecoveryUrl(url));
+    CapacitorApp.getLaunchUrl().then((result) => result?.url && handleRecoveryUrl(result.url));
+    return () => {
+      removed = true;
+      listenerPromise.then((listener) => listener.remove());
+    };
   }, []);
 
   const handleLogout = async () => {
@@ -70,12 +99,13 @@ export default function App() {
     } else {
       document.documentElement.classList.remove('dark');
     }
-    localStorage.setItem('dewu_theme', isDarkMode ? 'dark' : 'light');
+    localStorage.setItem('seller_inventory_theme', isDarkMode ? 'dark' : 'light');
+    localStorage.removeItem('dewu_theme');
   }, [isDarkMode]);
 
   // User Profile State
   const [userProfile, setUserProfile] = useState({
-    name: '得物卖家',
+    name: '卖家用户',
     avatar: ''
   });
 
@@ -105,7 +135,7 @@ export default function App() {
         }
 
         setUserProfile({
-          name: data.username || '得物卖家',
+          name: data.username || '卖家用户',
           avatar: avatarUrl
         });
       }
@@ -182,7 +212,6 @@ export default function App() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showOutboundModal, setShowOutboundModal] = useState(false);
   const [showPendingModal, setShowPendingModal] = useState(false);
-  const [showWidgetModal, setShowWidgetModal] = useState(false);
   const [showRecycleBin, setShowRecycleBin] = useState(false);
   const [showDataHealth, setShowDataHealth] = useState(false);
   const [showBackupRestore, setShowBackupRestore] = useState(false);
@@ -627,21 +656,6 @@ export default function App() {
     }
   }, [showWelcome, session]);
 
-  useEffect(() => {
-    if (!session || showWelcome) return;
-
-    updateWidgetData({
-      totalStock: inventoryAnalytics.dashboard.totalStock,
-      inboundToday: inventoryAnalytics.dashboard.todayInboundCount,
-      lastUpdated: new Date().toLocaleTimeString(),
-    });
-  }, [
-    inventoryAnalytics.dashboard.todayInboundCount,
-    inventoryAnalytics.dashboard.totalStock,
-    session,
-    showWelcome,
-  ]);
-
   const handleWelcomeComplete = () => {
     setShowWelcome(false);
   };
@@ -740,7 +754,6 @@ export default function App() {
             onToggleTheme={() => setIsDarkMode(!isDarkMode)}
             onLogout={handleLogout}
             email={session?.user?.email}
-            onWidgetClick={() => setShowWidgetModal(true)}
             onRecycleBinClick={() => setShowRecycleBin(true)}
             onExportClick={() => setShowBackupRestore(true)}
             onDataHealthClick={() => setShowDataHealth(true)}
@@ -771,6 +784,14 @@ export default function App() {
           />;
     }
   };
+
+  if (!isAuthReady) {
+    return <div className="flex h-full w-full items-center justify-center bg-slate-50 dark:bg-black"><Loader2 className="h-8 w-8 animate-spin text-dewu-500" /></div>;
+  }
+
+  if (isPasswordRecovery) {
+    return <AuthScreen isPasswordRecovery onAuthSuccess={() => {}} onRecoveryComplete={() => setIsPasswordRecovery(false)} />;
+  }
 
   if (!session) {
     return <AuthScreen onAuthSuccess={() => {}} />;
@@ -860,12 +881,6 @@ export default function App() {
                 fetchData();
                 setRefreshTrigger((value) => value + 1);
               }}
-            />
-            <WidgetSettingsModal
-              isOpen={showWidgetModal}
-              onClose={() => setShowWidgetModal(false)}
-              totalStock={inventoryAnalytics.dashboard.totalStock}
-              todayInbound={inventoryAnalytics.dashboard.todayInboundCount}
             />
           </>
         )}

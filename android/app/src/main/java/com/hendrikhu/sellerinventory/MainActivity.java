@@ -1,4 +1,4 @@
-package com.dewu.sellerpro;
+package com.hendrikhu.sellerinventory;
 
 import com.getcapacitor.BridgeActivity;
 
