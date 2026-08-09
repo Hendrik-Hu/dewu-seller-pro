@@ -224,9 +224,11 @@ export const Home: React.FC<HomeProps> = ({
                            ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
                            : activity.type === 'restore'
                              ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400'
+                             : activity.type === 'transfer'
+                               ? 'bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400'
                              : 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400'
                        }`}>
-                         {activity.type === 'inbound' ? '入库' : activity.type === 'restore' ? '恢复' : '出库'}
+                         {activity.type === 'inbound' ? '入库' : activity.type === 'restore' ? '恢复' : activity.type === 'transfer' ? '调拨' : '出库'}
                        </span>
                        <div className="flex items-center text-xs text-slate-500 dark:text-zinc-400">
                          <span>{activity.sku}</span>
@@ -240,7 +242,7 @@ export const Home: React.FC<HomeProps> = ({
                          <span>x{activity.count || 1}</span>
                        </div>
                     </div>
-                    {activity.type !== 'restore' && <div className="text-right">
+                    {!['restore', 'transfer'].includes(activity.type) && <div className="text-right">
                       <span className="text-sm font-bold text-dewu-600 dark:text-dewu-400">¥{getActivityGrossAmount(activity)}</span>
                       {getActivityQuantity(activity) > 1 && (
                         <div className="text-[10px] text-slate-400 dark:text-zinc-500">单价 ¥{activity.price}</div>

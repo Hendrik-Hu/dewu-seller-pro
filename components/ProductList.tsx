@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Search, Plus, Boxes, CircleDollarSign, Warehouse as WarehouseIcon, ChevronDown, ChevronLeft, ChevronRight, Check, MapPin, Trash2, Edit, X, Loader2, Star, CheckCircle2, Circle } from 'lucide-react';
+import { ArrowRightLeft, Search, Plus, Boxes, CircleDollarSign, Warehouse as WarehouseIcon, ChevronDown, ChevronLeft, ChevronRight, Check, MapPin, Trash2, Edit, X, Loader2, Star, CheckCircle2, Circle } from 'lucide-react';
 import { Product, Warehouse } from '../types';
 import { supabase } from '../lib/supabase';
 import { listProducts } from '../services/products';
@@ -10,6 +10,7 @@ interface ProductListProps {
   userId: string;
   onAddClick: () => void;
   onEditProduct: (product: Product) => void;
+  onTransferProduct: (product: Product) => void;
   onDeleteProduct: (productId: string) => void;
   onBatchDeleteProducts: (productIds: string[]) => Promise<void>;
   warehouses: Warehouse[];
@@ -40,7 +41,7 @@ interface AggregatedProductGroup {
   sizeRows: AggregatedSizeRow[];
 }
 
-export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, onEditProduct, onDeleteProduct, onBatchDeleteProducts, warehouses, onRenameWarehouse, onSetDefaultWarehouse, onAddWarehouse, refreshTrigger }) => {
+export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, onEditProduct, onTransferProduct, onDeleteProduct, onBatchDeleteProducts, warehouses, onRenameWarehouse, onSetDefaultWarehouse, onAddWarehouse, refreshTrigger }) => {
   const MAX_WAREHOUSES = 6;
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -824,7 +825,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                   >
                     {/* Action Overlay */}
                     {activeProductId === product.id && (
-                      <div className="absolute inset-0 z-20 bg-slate-900/95 dark:bg-black/95 flex items-center justify-center space-x-8 animate-[fadeIn_0.2s_ease-out]"
+                      <div className="absolute inset-0 z-20 bg-slate-900/95 dark:bg-black/95 flex items-center justify-center space-x-5 animate-[fadeIn_0.2s_ease-out]"
                            onClick={(e) => e.stopPropagation()}
                       >
                         <button 
@@ -839,6 +840,23 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                             <Edit size={20} />
                           </div>
                           <span className="text-[10px] font-medium text-white">修改</span>
+                        </button>
+
+                        <div className="w-[1px] h-8 bg-white/10"></div>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveProductId(null);
+                            onTransferProduct(product);
+                          }}
+                          disabled={product.stock <= 0 || product.status !== 'instock'}
+                          className="flex flex-col items-center group disabled:opacity-40"
+                        >
+                          <div className="p-3 bg-cyan-500/20 rounded-full text-cyan-300 group-active:bg-cyan-500/30 transition-colors mb-1">
+                            <ArrowRightLeft size={20} />
+                          </div>
+                          <span className="text-[10px] font-medium text-cyan-300">调拨</span>
                         </button>
 
                         <div className="w-[1px] h-8 bg-white/10"></div>
