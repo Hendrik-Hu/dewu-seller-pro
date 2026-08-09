@@ -71,6 +71,13 @@ export const mapActivityFromDb = (row: any): Activity => ({
   estimatedPlatformFee: row.estimated_platform_fee == null ? undefined : Number(row.estimated_platform_fee),
   estimatedNetProceeds: row.estimated_net_proceeds == null ? undefined : Number(row.estimated_net_proceeds),
   estimatedNetProfit: row.estimated_net_profit == null ? undefined : Number(row.estimated_net_profit),
+  actualPlatformFee: row.actual_platform_fee == null ? undefined : Number(row.actual_platform_fee),
+  actualNetProceeds: row.actual_net_proceeds == null ? undefined : Number(row.actual_net_proceeds),
+  actualNetProfit: row.actual_net_profit == null ? undefined : Number(row.actual_net_profit),
+  settledAt: row.settled_at || undefined,
+  settlementOrderNo: row.settlement_order_no || undefined,
+  settlementNote: row.settlement_note || undefined,
+  settlementRevision: row.settlement_revision == null ? undefined : Number(row.settlement_revision),
 });
 
 export const mapActivityToDb = (activity: Activity, userId: string) => ({
@@ -92,6 +99,13 @@ export const mapActivityToDb = (activity: Activity, userId: string) => ({
   estimated_platform_fee: activity.estimatedPlatformFee ?? null,
   estimated_net_proceeds: activity.estimatedNetProceeds ?? null,
   estimated_net_profit: activity.estimatedNetProfit ?? null,
+  actual_platform_fee: activity.actualPlatformFee ?? null,
+  actual_net_proceeds: activity.actualNetProceeds ?? null,
+  actual_net_profit: activity.actualNetProfit ?? null,
+  settled_at: activity.settledAt ?? null,
+  settlement_order_no: activity.settlementOrderNo ?? null,
+  settlement_note: activity.settlementNote ?? null,
+  settlement_revision: activity.settlementRevision ?? 0,
   user_id: userId,
 });
 

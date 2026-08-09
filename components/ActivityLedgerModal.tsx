@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, ChevronLeft, ChevronRight, Clock3, History, Loader2, RefreshCw, Search, X } from 'lucide-react';
+import { AlertTriangle, Calculator, ChevronLeft, ChevronRight, Clock3, History, Loader2, RefreshCw, Search, X } from 'lucide-react';
 import { Activity, Warehouse } from '../types';
 import { getActivityGrossAmount, getActivityQuantity } from '../lib/inventoryMetrics';
 import { formatProductSize } from '../lib/productNormalization';
 import { listActivityPage } from '../services/activities';
 import { DataRepairAudit, listDataRepairAuditPage } from '../services/dataHealth';
 import { ACTIVITY_TYPE_LABELS, getActivityTypeLabel } from '../lib/activityPresentation';
+import { SettlementModal } from './SettlementModal';
 
 interface ActivityLedgerModalProps {
   isOpen: boolean;
@@ -30,6 +31,7 @@ export const ActivityLedgerModal: React.FC<ActivityLedgerModalProps> = ({ isOpen
   const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [settlementActivity, setSettlementActivity] = useState<Activity | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -138,8 +140,9 @@ export const ActivityLedgerModal: React.FC<ActivityLedgerModalProps> = ({ isOpen
                       <span>成本 {activity.cost == null ? '未记录' : `¥${activity.cost}`}</span>
                       <span>{activity.platform || '未记录平台'}</span>
                       <span>{activity.source || '未记录来源'}</span>
-                      {activity.type === 'outbound' && <><span>平台费用 {activity.estimatedPlatformFee == null ? '未知' : `¥${activity.estimatedPlatformFee.toFixed(2)}`}</span><span>预计到手 {activity.estimatedNetProceeds == null ? '未知' : `¥${activity.estimatedNetProceeds.toFixed(2)}`}</span><span>预计净利润 {activity.estimatedNetProfit == null ? '未知' : `¥${activity.estimatedNetProfit.toFixed(2)}`}</span></>}
+                      {activity.type === 'outbound' && <><span>预计费用 {activity.estimatedPlatformFee == null ? '未知' : `¥${activity.estimatedPlatformFee.toFixed(2)}`}</span><span>预计净利润 {activity.estimatedNetProfit == null ? '未知' : `¥${activity.estimatedNetProfit.toFixed(2)}`}</span><span>实际费用 {activity.actualPlatformFee == null ? '待补录' : `¥${activity.actualPlatformFee.toFixed(2)}`}</span><span>实际净利润 {activity.actualNetProfit == null ? (activity.actualPlatformFee == null ? '待补录' : '成本未知') : `¥${activity.actualNetProfit.toFixed(2)}`}</span></>}
                     </div>
+                    {activity.type === 'outbound' && quantity > 0 && <button onClick={() => setSettlementActivity(activity)} className="mt-2 flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-medium text-slate-600 dark:bg-zinc-800 dark:text-zinc-300"><Calculator size={12} />{activity.settlementRevision ? '查看或更正结算' : '补录实际结算'}</button>}
                     {quantity === 0 && <div className="mt-2 flex items-center gap-1 text-[11px] text-red-500"><AlertTriangle size={12} />异常流水，不计入经营统计</div>}
                   </div>;
                 })}
@@ -170,6 +173,7 @@ export const ActivityLedgerModal: React.FC<ActivityLedgerModalProps> = ({ isOpen
           </footer>
         )}
       </div>
+      <SettlementModal activity={settlementActivity} userId={userId} onClose={() => setSettlementActivity(null)} onSaved={() => setReloadKey((value) => value + 1)} />
     </div>
   );
 };

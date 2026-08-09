@@ -47,6 +47,22 @@ export interface Activity {
   estimatedPlatformFee?: number;
   estimatedNetProceeds?: number;
   estimatedNetProfit?: number;
+  actualPlatformFee?: number;
+  actualNetProceeds?: number;
+  actualNetProfit?: number;
+  settledAt?: string;
+  settlementOrderNo?: string;
+  settlementNote?: string;
+  settlementRevision?: number;
+}
+
+export interface OutboundSettlementAudit {
+  id: string;
+  activityId: string;
+  revision: number;
+  previousSnapshot?: Record<string, unknown>;
+  settlementSnapshot: Record<string, unknown>;
+  createdAt: string;
 }
 
 export interface SalesStat {

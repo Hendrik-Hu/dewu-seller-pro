@@ -89,6 +89,20 @@ export const buildInventoryAnalytics = (
   const monthCostedOutboundCount = monthCostedOutboundActivities.reduce((sum, activity) => sum + getActivityQuantity(activity), 0);
   const monthMissingCostCount = monthOutboundCount - monthCostedOutboundCount;
   const monthCostCoverageRate = monthOutboundCount > 0 ? (monthCostedOutboundCount / monthOutboundCount) * 100 : 100;
+  const monthEstimatedProfitActivities = monthCostedOutboundActivities.filter((activity) =>
+    activity.estimatedNetProfit !== undefined && Number.isFinite(Number(activity.estimatedNetProfit))
+  );
+  const monthActualSettlementActivities = monthOutboundActivities.filter((activity) =>
+    activity.actualPlatformFee !== undefined && Number.isFinite(Number(activity.actualPlatformFee))
+  );
+  const monthActualProfitActivities = monthCostedOutboundActivities.filter((activity) =>
+    activity.actualNetProfit !== undefined && Number.isFinite(Number(activity.actualNetProfit))
+  );
+  const monthEstimatedNetProfitAmount = monthEstimatedProfitActivities.reduce((sum, activity) => sum + Number(activity.estimatedNetProfit), 0);
+  const monthActualNetProfitAmount = monthActualProfitActivities.reduce((sum, activity) => sum + Number(activity.actualNetProfit), 0);
+  const monthEstimatedProfitCount = monthEstimatedProfitActivities.reduce((sum, activity) => sum + getActivityQuantity(activity), 0);
+  const monthSettledCount = monthActualSettlementActivities.reduce((sum, activity) => sum + getActivityQuantity(activity), 0);
+  const monthActualProfitCount = monthActualProfitActivities.reduce((sum, activity) => sum + getActivityQuantity(activity), 0);
 
   const salesTrendMap = new Map<string, { name: string; value: number }>();
   const rollingStart = new Date(now);
@@ -166,6 +180,12 @@ export const buildInventoryAnalytics = (
       grossMarginRate: monthGrossMarginRate,
       costCoverageRate: monthCostCoverageRate,
       missingCostCount: monthMissingCostCount,
+      estimatedNetProfitAmount: monthEstimatedNetProfitAmount,
+      estimatedProfitCoverageRate: monthCostedOutboundCount > 0 ? (monthEstimatedProfitCount / monthCostedOutboundCount) * 100 : 100,
+      actualNetProfitAmount: monthActualNetProfitAmount,
+      actualProfitCoverageRate: monthCostedOutboundCount > 0 ? (monthActualProfitCount / monthCostedOutboundCount) * 100 : 100,
+      settlementCoverageRate: monthOutboundCount > 0 ? (monthSettledCount / monthOutboundCount) * 100 : 100,
+      pendingSettlementCount: Math.max(0, monthOutboundCount - monthSettledCount),
       inboundCount: monthInboundCount,
       outboundCount: monthOutboundCount,
     },

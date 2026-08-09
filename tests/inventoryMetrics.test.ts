@@ -64,3 +64,19 @@ test('negative stock and invalid activities are excluded and counted as data qua
   assert.equal(analytics.lifetime.totalInboundCount, 0);
   assert.deepEqual(analytics.dataQuality, { negativeStockCount: 1, invalidActivityCount: 1 });
 });
+
+test('estimated and actual net profit remain separate and unknown fees do not inflate either total', () => {
+  const analytics = buildInventoryAnalytics([], [
+    activity({ id: 'settled', price: 100, cost: 60, count: 2, estimatedNetProfit: 60, actualPlatformFee: 30, actualNetProfit: 50 }),
+    activity({ id: 'estimated-only', price: 100, cost: 70, count: 1, estimatedNetProfit: 20 }),
+    activity({ id: 'fee-unknown', price: 100, cost: 80, count: 1 }),
+    activity({ id: 'cost-unknown', price: 100, cost: undefined, count: 1, actualPlatformFee: 10 }),
+  ], new Date('2026-08-08T12:00:00+08:00'));
+
+  assert.equal(analytics.monthly.estimatedNetProfitAmount, 80);
+  assert.equal(analytics.monthly.actualNetProfitAmount, 50);
+  assert.equal(analytics.monthly.pendingSettlementCount, 2);
+  assert.equal(analytics.monthly.settlementCoverageRate, 60);
+  assert.equal(analytics.monthly.estimatedProfitCoverageRate, 75);
+  assert.equal(analytics.monthly.actualProfitCoverageRate, 50);
+});

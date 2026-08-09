@@ -79,6 +79,15 @@ export const Stats: React.FC<StatsProps> = ({ products, activities, onAIExecuted
         </div>
       )}
 
+      <div className="mb-6 rounded-xl border border-slate-100 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-bold text-slate-800 dark:text-white">本月净利润口径</h2><span className="text-[10px] text-slate-400">自然月</span></div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-lg bg-indigo-50 p-3 dark:bg-indigo-950/20"><p className="text-[10px] text-indigo-500">预计净利润</p><p className="mt-1 text-base font-bold text-indigo-700 dark:text-indigo-300">¥{monthly.estimatedNetProfitAmount.toLocaleString()}</p><p className="mt-1 text-[10px] text-indigo-400">已记成本件数中覆盖 {monthly.estimatedProfitCoverageRate.toFixed(0)}%</p></div>
+          <div className="rounded-lg bg-emerald-50 p-3 dark:bg-emerald-950/20"><p className="text-[10px] text-emerald-600">实际净利润</p><p className="mt-1 text-base font-bold text-emerald-700 dark:text-emerald-300">¥{monthly.actualNetProfitAmount.toLocaleString()}</p><p className="mt-1 text-[10px] text-emerald-500">已记成本件数中覆盖 {monthly.actualProfitCoverageRate.toFixed(0)}%</p></div>
+        </div>
+        <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 text-[11px] dark:border-zinc-800">{monthly.outboundCount === 0 ? <span className="text-slate-400">本月暂无出库</span> : <><span className="text-slate-500">全部出库件数中，实际结算覆盖 {monthly.settlementCoverageRate.toFixed(0)}%</span><span className={monthly.pendingSettlementCount > 0 ? 'text-amber-600' : 'text-emerald-600'}>{monthly.pendingSettlementCount > 0 ? `待补录 ${monthly.pendingSettlementCount} 件` : '本月已全部补录'}</span></>}</div>
+      </div>
+
       <div
         onClick={() => setIsAIModalOpen(true)}
         className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm mb-6 overflow-hidden flex flex-col cursor-pointer hover:shadow-md transition-shadow group"
