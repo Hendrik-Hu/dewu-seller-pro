@@ -131,14 +131,27 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
   // Long press handling
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPress = useRef(false);
+  const suppressClickUntil = useRef(0);
+  const longPressOrigin = useRef<{ x: number; y: number } | null>(null);
 
-  const handleTouchStart = (product: Product) => {
+  const clearLongPressTimer = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>, product: Product) => {
     if (isSelectionMode) return;
     if (activeProductId === product.id) return;
 
+    clearLongPressTimer();
     isLongPress.current = false;
+    longPressOrigin.current = { x: event.clientX, y: event.clientY };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
     longPressTimer.current = setTimeout(() => {
       isLongPress.current = true;
+      suppressClickUntil.current = Date.now() + 1000;
       if (window.navigator && window.navigator.vibrate) {
         window.navigator.vibrate(50);
       }
@@ -146,9 +159,18 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
     }, 600);
   };
 
-  const handleTouchEnd = () => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const origin = longPressOrigin.current;
+    if (origin && Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > 10) {
+      clearLongPressTimer();
+    }
+  };
+
+  const handlePointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+    clearLongPressTimer();
+    longPressOrigin.current = null;
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
     }
   };
 
@@ -745,7 +767,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                     ? '点击商品可勾选或取消勾选'
                     : isSearchGroupingMode
                       ? `该搜索下共有 ${aggregatedSearchResults.length} 款商品，${aggregatedSearchStockCount} 个库存`
-                      : `长按商品进行管理 · 每页 ${ITEMS_PER_PAGE} 条 · 共 ${totalCount} 条`}
+                      : `点击或长按商品进行管理 · 每页 ${ITEMS_PER_PAGE} 条 · 共 ${totalCount} 条`}
                 </p>
                 
                 {products.length === 0 && (
@@ -805,21 +827,30 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                 )) : products.map((product) => (
                   <div 
                     key={product.id} 
-                    className="bg-white dark:bg-zinc-900 p-2 rounded-xl border border-slate-100 dark:border-zinc-800 shadow-sm flex space-x-3 relative active:scale-[0.99] transition-transform select-none overflow-hidden"
-                    onTouchStart={() => handleTouchStart(product)}
-                    onTouchEnd={handleTouchEnd}
-                    onTouchMove={handleTouchEnd}
-                    onMouseDown={() => handleTouchStart(product)}
-                    onMouseUp={handleTouchEnd}
-                    onMouseLeave={handleTouchEnd}
+                    className="bg-white dark:bg-zinc-900 p-2 rounded-xl border border-slate-100 dark:border-zinc-800 shadow-sm flex space-x-3 relative select-none overflow-hidden"
+                    onPointerDown={(event) => handlePointerDown(event, product)}
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={handlePointerEnd}
+                    onPointerCancel={handlePointerEnd}
+                    onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (!isSelectionMode) {
+                            setActiveProductId(product.id);
+                        }
+                    }}
                     onClick={(e) => {
                         e.stopPropagation();
+                        if (isLongPress.current || Date.now() < suppressClickUntil.current) {
+                            isLongPress.current = false;
+                            return;
+                        }
                         if (isSelectionMode) {
                             toggleProductSelection(product.id);
                             return;
                         }
                         if (!activeProductId) {
-                            onEditProduct(product);
+                            setActiveProductId(product.id);
                         }
                     }} 
                   >
