@@ -3,6 +3,7 @@ import { X, ArrowUpRight, Search, DollarSign } from 'lucide-react';
 import { Product } from '../types';
 import { normalizeOutboundQuantity, normalizeSalePrice } from '../lib/outboundRules';
 import { formatProductSize, normalizeSku } from '../lib/productNormalization';
+import { ProductImage } from './ProductImage';
 
 interface OutboundModalProps {
   isOpen: boolean;
@@ -140,7 +141,7 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, p
                     <div className="text-[11px] text-slate-400 mb-1">常用在库商品</div>
                     {quickPickProducts.map(product => (
                       <div key={product.id} className="flex items-center space-x-3 bg-white p-2 rounded-xl border border-slate-100 shadow-sm animate-[fadeIn_0.2s_ease-out]">
-                        <img src={product.imageUrl} alt={product.name} className="w-14 h-14 rounded-lg object-cover bg-slate-100" />
+                        <ProductImage src={product.imageUrl} alt={product.name} className="w-14 h-14 rounded-lg object-cover bg-slate-100" />
                         <div className="flex-1 min-w-0">
                           <h4 className="text-xs font-bold text-slate-900 truncate">{product.name}</h4>
                           <p className="text-[10px] text-slate-400 mt-0.5">{product.sku} · {formatProductSize(product.size)} · 库存 {product.stock}</p>
@@ -165,7 +166,7 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, p
               ) : (
                 availableProducts.map(product => (
                   <div key={product.id} className="flex items-center space-x-3 bg-white p-2 rounded-xl border border-slate-100 shadow-sm animate-[fadeIn_0.2s_ease-out]">
-                    <img src={product.imageUrl} alt={product.name} className="w-14 h-14 rounded-lg object-cover bg-slate-100" />
+                    <ProductImage src={product.imageUrl} alt={product.name} className="w-14 h-14 rounded-lg object-cover bg-slate-100" />
                     <div className="flex-1 min-w-0">
                       <h4 className="text-xs font-bold text-slate-900 truncate">{product.name}</h4>
                       <p className="text-[10px] text-slate-400 mt-0.5">{product.brand} · {formatProductSize(product.size)} · 库存 {product.stock}</p>
@@ -188,7 +189,7 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, p
         ) : (
           <div className="p-6 space-y-6 overflow-y-auto">
             <div className="flex items-start space-x-4">
-               <img src={selectedProduct.imageUrl} alt={selectedProduct.name} className="w-20 h-20 rounded-xl object-cover bg-slate-100 shadow-sm" />
+               <ProductImage src={selectedProduct.imageUrl} alt={selectedProduct.name} className="w-20 h-20 rounded-xl object-cover bg-slate-100 shadow-sm" />
                <div>
                   <h3 className="font-bold text-slate-900 text-sm">{selectedProduct.name}</h3>
                   <p className="text-xs text-slate-500 mt-1">{selectedProduct.sku}</p>

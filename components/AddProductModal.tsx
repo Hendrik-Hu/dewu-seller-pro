@@ -13,9 +13,17 @@ interface AddProductModalProps {
   initialData?: Product | null;
   warehouses: Warehouse[];
   existingProducts: Product[];
+  userId: string;
 }
 
 const DRAFT_KEY = 'addProductDraftV2';
+const getDraftKey = (userId: string) => `${DRAFT_KEY}:${userId}`;
+
+const serializeDraft = (productData: Partial<Product>) => JSON.stringify({
+  ...productData,
+  imageDataUrl: undefined,
+  imageFile: undefined,
+});
 
 const createEmptyDraft = (warehouses: Warehouse[]): Partial<Product> => ({
   name: '',
@@ -48,6 +56,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   initialData,
   warehouses,
   existingProducts,
+  userId,
 }) => {
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [productData, setProductData] = useState<Partial<Product>>(createEmptyDraft(warehouses));
@@ -73,7 +82,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
     let isMounted = true;
     const loadDraft = async () => {
       try {
-        const { value } = await Preferences.get({ key: DRAFT_KEY });
+        await Preferences.remove({ key: DRAFT_KEY });
+        const { value } = await Preferences.get({ key: getDraftKey(userId) });
         if (!isMounted) return;
         if (value) {
           const parsed = JSON.parse(value);
@@ -99,32 +109,26 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [isOpen, initialData, warehouses]);
+  }, [isOpen, initialData, userId, warehouses]);
 
   useEffect(() => {
     if (!isOpen || initialData) return;
 
     Preferences.set({
-      key: DRAFT_KEY,
-      value: JSON.stringify({
-        ...productData,
-        imageFile: undefined,
-      }),
+      key: getDraftKey(userId),
+      value: serializeDraft(productData),
     }).catch((error) => {
       console.warn('Failed to save draft', error);
     });
-  }, [initialData, isOpen, productData]);
+  }, [initialData, isOpen, productData, userId]);
 
   useEffect(() => {
     if (!isOpen || initialData) return;
 
     const persistDraft = () => {
       Preferences.set({
-        key: DRAFT_KEY,
-        value: JSON.stringify({
-          ...productData,
-          imageFile: undefined,
-        }),
+        key: getDraftKey(userId),
+        value: serializeDraft(productData),
       }).catch(() => {});
     };
 
@@ -141,7 +145,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       window.removeEventListener('beforeunload', persistDraft);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [initialData, isOpen, productData]);
+  }, [initialData, isOpen, productData, userId]);
 
   const skuSuggestions = useMemo(() => {
     if (!deferredSku) return [];
@@ -287,7 +291,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
 
     try {
       await onSave(product);
-      await Preferences.remove({ key: DRAFT_KEY });
+      await Preferences.remove({ key: getDraftKey(userId) });
     } catch (error) {
       console.error('Save operation failed', error);
     }

@@ -8,6 +8,7 @@ import {
   normalizeStock,
   normalizeStoredCost,
 } from '../lib/productNormalization';
+import { isProductImageRef } from './storageImages';
 
 export const mapProductFromDb = (row: any): Product => ({
   id: row.id,
@@ -18,6 +19,7 @@ export const mapProductFromDb = (row: any): Product => ({
   price: normalizeStoredCost(row.price),
   stock: normalizeStock(row.stock),
   imageUrl: row.image_url || row.imageUrl || '',
+  imageStorageRef: isProductImageRef(row.image_url || row.imageUrl) ? (row.image_url || row.imageUrl) : undefined,
   status: row.status || 'instock',
   location: row.location || '',
   warehouse: String(row.warehouse || '').trim(),
@@ -34,7 +36,7 @@ export const mapProductToDb = (product: Product, userId: string) => {
     sku: normalized.sku,
     price: normalized.price,
     stock: normalized.stock,
-    image_url: normalized.imageUrl,
+    image_url: normalized.imageStorageRef || normalized.imageUrl,
     status: normalized.status,
     location: normalized.location,
     warehouse: normalized.warehouse,
@@ -54,6 +56,7 @@ export const mapActivityFromDb = (row: any): Activity => ({
   price: normalizeStoredCost(row.price),
   cost: normalizeOptionalStoredCost(row.cost),
   imageUrl: row.image_url || row.imageUrl || '',
+  imageStorageRef: isProductImageRef(row.image_url || row.imageUrl) ? (row.image_url || row.imageUrl) : undefined,
   createdAt: row.created_at || row.createdAt,
   created_at: row.created_at,
   warehouse: row.warehouse,
@@ -69,7 +72,7 @@ export const mapActivityToDb = (activity: Activity, userId: string) => ({
   size: activity.size == null ? undefined : normalizeSize(activity.size),
   price: activity.price,
   cost: activity.cost,
-  image_url: activity.imageUrl,
+  image_url: activity.imageStorageRef || activity.imageUrl,
   created_at: activity.created_at || activity.createdAt || new Date().toISOString(),
   warehouse: activity.warehouse,
   count: Number(activity.count || 1),

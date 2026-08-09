@@ -119,7 +119,6 @@ export const Stats: React.FC<StatsProps> = ({ products, activities }) => {
         onClose={() => setIsAIModalOpen(false)}
         products={products}
         activities={activities}
-        warehouses={[]}
       />
 
       <div className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm mb-6">

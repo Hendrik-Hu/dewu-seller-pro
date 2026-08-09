@@ -1,7 +1,7 @@
 {
   "name": "dewu-seller-pro",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "node ./node_modules/vite/bin/vite.js",
@@ -14,19 +14,23 @@
   },
   "dependencies": {
     "@capacitor/android": "^6.2.1",
-    "@capacitor/cli": "^6.2.1",
     "@capacitor/core": "^6.2.1",
-    "@capacitor/preferences": "^6.0.0",
-    "@coze/api": "^1.3.9",
-    "@supabase/supabase-js": "2",
+    "@capacitor/preferences": "^6.0.4",
+    "@supabase/supabase-js": "^2.112.2",
     "lucide-react": "^0.563.0",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "recharts": "^3.7.0"
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "recharts": "^3.10.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "^6.2.1",
     "@types/node": "^22.14.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^5.0.0",
+    "autoprefixer": "^10.5.4",
+    "postcss": "^8.5.26",
+    "tailwindcss": "^3.4.17",
     "typescript": "~5.8.2",
     "vercel": "^50.28.0",
     "vite": "^6.2.0"

@@ -20,6 +20,7 @@ import { buildInventoryAnalytics } from './lib/inventoryMetrics';
 import { Loader2 } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { formatProductSize, normalizeProduct, sameInventoryVariant } from './lib/productNormalization';
+import { createProductImageRef, isProductImageRef } from './services/storageImages';
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -199,7 +200,7 @@ export default function App() {
     }
 
     if (!file) {
-      return product.imageUrl;
+      return product.imageStorageRef || product.imageUrl;
     }
 
     const ext = file.name.split('.').pop() || 'jpg';
@@ -207,16 +208,12 @@ export default function App() {
     const path = `${userId}/products/${safeSku}/${Date.now()}.${ext}`;
 
     const { error: uploadError } = await supabase.storage
-      .from('avatars')
+      .from('product-images')
       .upload(path, file, { upsert: true });
 
     if (uploadError) throw uploadError;
 
-    const { data: { publicUrl } } = supabase.storage
-      .from('avatars')
-      .getPublicUrl(path);
-
-    return publicUrl;
+    return createProductImageRef(path);
   };
 
   // Fetch Warehouses
@@ -390,6 +387,7 @@ export default function App() {
       finalProduct = {
         ...finalProduct,
         imageUrl: uploadedImageUrl || finalProduct.imageUrl || `https://picsum.photos/200/200?random=${Date.now()}`,
+        imageStorageRef: isProductImageRef(uploadedImageUrl) ? uploadedImageUrl : finalProduct.imageStorageRef,
         source: normalizedProduct.source || finalProduct.source || '',
         imageDataUrl: '',
         imageFile: undefined,
@@ -725,6 +723,7 @@ export default function App() {
               initialData={editingProduct}
               warehouses={warehouses}
               existingProducts={products}
+              userId={session.user.id}
             />
             <OutboundModal
               isOpen={showOutboundModal}
