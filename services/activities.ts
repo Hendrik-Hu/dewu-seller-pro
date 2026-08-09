@@ -36,6 +36,7 @@ interface CreateInventoryActivityParams {
   imageUrl: string;
   warehouse?: string;
   count?: number;
+  source?: string;
   createdAt?: string;
 }
 
@@ -50,6 +51,7 @@ export const createInventoryActivity = async ({
   imageUrl,
   warehouse,
   count = 1,
+  source,
   createdAt,
 }: CreateInventoryActivityParams) => {
   const timestamp = createdAt || new Date().toISOString();
@@ -68,6 +70,7 @@ export const createInventoryActivity = async ({
     created_at: timestamp,
     warehouse,
     count,
+    source,
   }, userId);
 };
 

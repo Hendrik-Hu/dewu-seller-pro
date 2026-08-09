@@ -41,6 +41,7 @@ export interface Activity {
   created_at?: string; // SnakeCase for DB compatibility
   warehouse?: string;
   count?: number;
+  source?: string;
 }
 
 export interface SalesStat {

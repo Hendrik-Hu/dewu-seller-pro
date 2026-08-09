@@ -15,7 +15,7 @@ import { updateWidgetData } from './utils/widget';
 import { Tab, Product, Activity, Warehouse } from './types';
 import { supabase } from './lib/supabase';
 import { createInventoryActivity, listActivities } from './services/activities';
-import { batchUpdateProductStatus, deleteProduct, listAllProducts, listProductsForExport, syncProductMainImageBySku, upsertProduct } from './services/products';
+import { batchInboundProducts, batchUpdateProductStatus, deleteProduct, listAllProducts, listProductsForExport, syncProductMainImageBySku, upsertProduct } from './services/products';
 import { outboundProduct } from './services/outbound';
 import { buildInventoryAnalytics } from './lib/inventoryMetrics';
 import { Loader2 } from 'lucide-react';
@@ -208,7 +208,8 @@ export default function App() {
 
     const ext = file.name.split('.').pop() || 'jpg';
     const safeSku = (product.sku || 'product').replace(/[^a-zA-Z0-9_-]/g, '_');
-    const path = `${userId}/products/${safeSku}/${Date.now()}.${ext}`;
+    const safeProductId = (product.id || 'draft').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const path = `${userId}/products/${safeSku}/${safeProductId}.${ext}`;
 
     const { error: uploadError } = await supabase.storage
       .from('product-images')
@@ -346,8 +347,29 @@ export default function App() {
     }
   };
 
-  const handleAddOrUpdateProduct = async (product: Product) => {
+  const handleAddOrUpdateProduct = async (productInput: Product | Product[]) => {
     try {
+      if (Array.isArray(productInput)) {
+        if (!session?.user?.id || productInput.length === 0) return;
+        const normalizedProducts = productInput.map(normalizeProduct);
+        const uploadedImageUrl = await uploadProductImage(session.user.id, normalizedProducts[0]);
+        const productsToSave = normalizedProducts.map((product) => ({
+          ...product,
+          imageUrl: uploadedImageUrl || product.imageUrl || '',
+          imageStorageRef: isProductImageRef(uploadedImageUrl) ? uploadedImageUrl : product.imageStorageRef,
+          imageDataUrl: '',
+          imageFile: undefined,
+        }));
+
+        await batchInboundProducts(productsToSave, session.user.id);
+        await fetchData();
+        setRefreshTrigger((previous) => previous + 1);
+        setShowAddModal(false);
+        setEditingProduct(null);
+        return;
+      }
+
+      const product = productInput;
       const normalizedProduct = normalizeProduct(product);
       // Check for existing product with same SKU and Size (Unique constraint logic)
       const existingProduct = products.find(
@@ -416,6 +438,7 @@ export default function App() {
              imageUrl: finalProduct.imageUrl,
              warehouse: finalProduct.warehouse,
              count: normalizedProduct.stock,
+             source: normalizedProduct.source,
            });
          } catch (insertActError) {
            console.error('Activity Insert Error:', insertActError);

@@ -171,6 +171,59 @@ export const restoreProduct = async (productId: string, userId: string): Promise
   };
 };
 
+interface BatchInboundResult {
+  inputIndex: number;
+  productId: string;
+  merged: boolean;
+  stock: number;
+  averageCost: number;
+}
+
+export const batchInboundProducts = async (products: Product[], userId: string): Promise<BatchInboundResult[]> => {
+  const rows = products.map((product) => {
+    const normalized = mapProductToDb(product, userId);
+    return {
+      id: normalized.id,
+      name: normalized.name,
+      brand: normalized.brand,
+      sku: normalized.sku,
+      size: normalized.size,
+      cost: normalized.price,
+      quantity: normalized.stock,
+      image_url: normalized.image_url,
+      status: normalized.status,
+      location: normalized.location,
+      warehouse: normalized.warehouse,
+      source: normalized.source,
+    };
+  });
+
+  const { data, error } = await supabase.rpc('batch_inbound_products', {
+    p_batch_id: `manual-${products[0]?.id || Date.now()}`,
+    p_rows: rows,
+    p_user_id: userId,
+  });
+
+  if (error) throw error;
+  const results = Array.isArray(data) ? data.map((item: any) => ({
+    inputIndex: Number(item.input_index),
+    productId: String(item.product_id),
+    merged: Boolean(item.merged),
+    stock: Number(item.stock),
+    averageCost: Number(item.average_cost),
+  })) : [];
+
+  const metadataWrites = await Promise.allSettled(results.map((result) => {
+    const product = products[result.inputIndex];
+    return product ? saveProductLocalMetadata(userId, { ...product, id: result.productId }) : Promise.resolve();
+  }));
+  if (metadataWrites.some((result) => result.status === 'rejected')) {
+    console.warn('Inbound committed, but some local product metadata could not be cached.');
+  }
+
+  return results;
+};
+
 export const updateProductStock = async (productId: string, userId: string, stock: number) => {
   const { error } = await supabase
     .from('products')

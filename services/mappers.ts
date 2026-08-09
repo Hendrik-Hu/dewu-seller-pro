@@ -63,6 +63,7 @@ export const mapActivityFromDb = (row: any): Activity => ({
   created_at: row.created_at,
   warehouse: row.warehouse,
   count: row.count ? Number(row.count) : 1,
+  source: row.source || '',
 });
 
 export const mapActivityToDb = (activity: Activity, userId: string) => ({
@@ -78,6 +79,7 @@ export const mapActivityToDb = (activity: Activity, userId: string) => ({
   created_at: activity.created_at || activity.createdAt || new Date().toISOString(),
   warehouse: activity.warehouse,
   count: Number(activity.count || 1),
+  source: activity.source || '',
   user_id: userId,
 });
 

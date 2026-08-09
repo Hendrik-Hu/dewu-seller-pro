@@ -1,5 +1,5 @@
 import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, Loader2, Save, Sparkles, Trash2, X } from 'lucide-react';
+import { Camera, Loader2, Plus, Save, Sparkles, Trash2, X } from 'lucide-react';
 import { Preferences } from '@capacitor/preferences';
 import { Product, Warehouse } from '../types';
 import { supabase } from '../lib/supabase';
@@ -8,7 +8,7 @@ import { normalizeBrand, normalizeSize, normalizeSku } from '../lib/productNorma
 interface AddProductModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (product: Product) => Promise<void> | void;
+  onSave: (product: Product | Product[]) => Promise<void> | void;
   onDelete?: (productId: string) => void;
   initialData?: Product | null;
   warehouses: Warehouse[];
@@ -18,14 +18,24 @@ interface AddProductModalProps {
 
 const DRAFT_KEY = 'addProductDraftV2';
 const getDraftKey = (userId: string) => `${DRAFT_KEY}:${userId}`;
+const createDraftId = () => globalThis.crypto?.randomUUID?.() || `draft-${Date.now()}`;
 
-const serializeDraft = (productData: Partial<Product>) => JSON.stringify({
+interface AdditionalVariant {
+  id: string;
+  size: string;
+  price?: number;
+  stock?: number;
+}
+
+const serializeDraft = (productData: Partial<Product>, additionalVariants: AdditionalVariant[]) => JSON.stringify({
   ...productData,
   imageDataUrl: undefined,
   imageFile: undefined,
+  additionalVariants,
 });
 
 const createEmptyDraft = (warehouses: Warehouse[]): Partial<Product> => ({
+  id: createDraftId(),
   name: '',
   brand: '',
   sku: '',
@@ -60,6 +70,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
 }) => {
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [productData, setProductData] = useState<Partial<Product>>(createEmptyDraft(warehouses));
+  const [additionalVariants, setAdditionalVariants] = useState<AdditionalVariant[]>([]);
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
   const [showSkuSuggestions, setShowSkuSuggestions] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -76,6 +87,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
         imageDataUrl: '',
       });
       setSelectedImageFile(null);
+      setAdditionalVariants([]);
       return;
     }
 
@@ -87,11 +99,14 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
         if (!isMounted) return;
         if (value) {
           const parsed = JSON.parse(value);
+          const restoredVariants = Array.isArray(parsed.additionalVariants) ? parsed.additionalVariants : [];
+          delete parsed.additionalVariants;
           setProductData({
             ...createEmptyDraft(warehouses),
             ...parsed,
             warehouse: parsed.warehouse || warehouses[0]?.name || '杭州一号仓',
           });
+          setAdditionalVariants(restoredVariants);
           return;
         }
       } catch (error) {
@@ -100,6 +115,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
 
       if (isMounted) {
         setProductData(createEmptyDraft(warehouses));
+        setAdditionalVariants([]);
       }
     };
 
@@ -116,11 +132,11 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
 
     Preferences.set({
       key: getDraftKey(userId),
-      value: serializeDraft(productData),
+      value: serializeDraft(productData, additionalVariants),
     }).catch((error) => {
       console.warn('Failed to save draft', error);
     });
-  }, [initialData, isOpen, productData, userId]);
+  }, [additionalVariants, initialData, isOpen, productData, userId]);
 
   useEffect(() => {
     if (!isOpen || initialData) return;
@@ -128,7 +144,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
     const persistDraft = () => {
       Preferences.set({
         key: getDraftKey(userId),
-        value: serializeDraft(productData),
+        value: serializeDraft(productData, additionalVariants),
       }).catch(() => {});
     };
 
@@ -145,7 +161,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       window.removeEventListener('beforeunload', persistDraft);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [initialData, isOpen, productData, userId]);
+  }, [additionalVariants, initialData, isOpen, productData, userId]);
 
   const skuSuggestions = useMemo(() => {
     if (!deferredSku) return [];
@@ -272,8 +288,35 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       return;
     }
 
+    const variantRows = [
+      { size: String(productData.size || ''), price: cost, stock },
+      ...additionalVariants,
+    ];
+    for (let index = 0; index < variantRows.length; index += 1) {
+      const variant = variantRows[index];
+      if (!String(variant.size || '').trim()) {
+        alert(`请填写第 ${index + 1} 行的尺码`);
+        return;
+      }
+      if (!Number.isFinite(Number(variant.price)) || Number(variant.price) < 0) {
+        alert(`第 ${index + 1} 行的成本必须是大于或等于 0 的有效数字`);
+        return;
+      }
+      if (!Number.isInteger(Number(variant.stock)) || Number(variant.stock) <= 0) {
+        alert(`第 ${index + 1} 行的库存必须是大于 0 的整数`);
+        return;
+      }
+    }
+
+    const normalizedSizes = variantRows.map((variant) => normalizeSize(variant.size));
+    if (new Set(normalizedSizes).size !== normalizedSizes.length) {
+      alert('同一批次中不能重复填写相同尺码');
+      return;
+    }
+
+    const productId = initialData?.id || productData.id || createDraftId();
     const product: Product = {
-      id: initialData?.id || Date.now().toString(),
+      id: productId,
       name: String(productData.name || '').trim() || normalizeSku(productData.sku),
       brand: normalizeBrand(productData.brand),
       size: normalizeSize(productData.size),
@@ -289,8 +332,18 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       source: productData.source || '',
     };
 
+    const batchProducts = variantRows.map((variant, index) => ({
+      ...product,
+      id: index === 0 ? productId : `${productId}-${index}`,
+      size: normalizeSize(variant.size),
+      price: Number(variant.price),
+      stock: Number(variant.stock),
+      imageFile: index === 0 ? product.imageFile : undefined,
+      imageDataUrl: index === 0 ? product.imageDataUrl : '',
+    }));
+
     try {
-      await onSave(product);
+      await onSave(initialData ? product : batchProducts);
       await Preferences.remove({ key: getDraftKey(userId) });
     } catch (error) {
       console.error('Save operation failed', error);
@@ -519,6 +572,56 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             </div>
           </div>
 
+          {!initialData && (
+            <div className="space-y-2">
+              {additionalVariants.map((variant, index) => (
+                <div key={variant.id} className="grid grid-cols-[1fr_1fr_1fr_36px] items-center gap-2 rounded-xl bg-slate-50 p-2">
+                  <input
+                    type="text"
+                    aria-label={`第 ${index + 2} 行尺码`}
+                    className="min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm focus:border-dewu-500 focus:outline-none"
+                    placeholder="尺码"
+                    value={variant.size}
+                    onChange={(event) => setAdditionalVariants((rows) => rows.map((row) => row.id === variant.id ? { ...row, size: event.target.value } : row))}
+                  />
+                  <input
+                    type="number"
+                    aria-label={`第 ${index + 2} 行成本`}
+                    className="min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm focus:border-dewu-500 focus:outline-none"
+                    placeholder="成本"
+                    value={variant.price ?? ''}
+                    onChange={(event) => setAdditionalVariants((rows) => rows.map((row) => row.id === variant.id ? { ...row, price: event.target.value === '' ? undefined : Number(event.target.value) } : row))}
+                  />
+                  <input
+                    type="number"
+                    aria-label={`第 ${index + 2} 行库存`}
+                    className="min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm focus:border-dewu-500 focus:outline-none"
+                    placeholder="数量"
+                    value={variant.stock ?? ''}
+                    onChange={(event) => setAdditionalVariants((rows) => rows.map((row) => row.id === variant.id ? { ...row, stock: event.target.value === '' ? undefined : Number(event.target.value) } : row))}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setAdditionalVariants((rows) => rows.filter((row) => row.id !== variant.id))}
+                    className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-red-500"
+                    title="移除此尺码"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setAdditionalVariants((rows) => [...rows, { id: `${Date.now()}-${rows.length}`, size: '', price: productData.price, stock: 1 }])}
+                disabled={additionalVariants.length >= 11}
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-300 py-2 text-xs font-medium text-slate-500 disabled:opacity-40"
+              >
+                <Plus size={15} />
+                {additionalVariants.length >= 11 ? '单次最多 12 个尺码' : '添加尺码'}
+              </button>
+            </div>
+          )}
+
           <div className="mt-4 flex space-x-3">
             {initialData && (
               <button
@@ -534,7 +637,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
               className="flex-1 bg-slate-900 text-white font-medium py-3 rounded-xl flex items-center justify-center space-x-2 active:scale-95 transition-all shadow-lg shadow-slate-200"
             >
               <Save size={18} />
-              <span>{initialData ? '保存修改' : '保存入库'}</span>
+              <span>{initialData ? '保存修改' : additionalVariants.length > 0 ? `批量入库 ${additionalVariants.length + 1} 个尺码` : '保存入库'}</span>
             </button>
           </div>
         </div>
