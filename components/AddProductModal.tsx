@@ -299,7 +299,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
 
   const handleDelete = () => {
     if (initialData?.id && onDelete) {
-      if (confirm('确定要删除这个商品吗？删除后无法恢复。')) {
+      if (confirm('确定要将这个商品移入回收站吗？之后可以恢复。')) {
         onDelete(initialData.id);
       }
     }

@@ -175,6 +175,7 @@ export const AIManagementModal: React.FC<AIManagementModalProps> = ({
       setPendingPlan(null);
     } catch (error: any) {
       pushAssistantMessage(`确认失败：${error.message || '请重新生成执行计划'}`);
+      setPendingPlan(null);
     } finally {
       setIsLoading(false);
     }
@@ -200,7 +201,7 @@ export const AIManagementModal: React.FC<AIManagementModalProps> = ({
           </button>
         </div>
 
-        <div className="mx-4 mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300 flex items-start space-x-2">
+        <div className="mx-4 mt-3 mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300 flex items-start space-x-2">
           <ShieldAlert size={14} className="mt-0.5 shrink-0" />
           <span>执行类指令至少要包含品牌、货号、尺码。数量默认 1，仓库默认主仓库，成本默认 0。真正执行由 Supabase 后端完成，且必须经过你的确认。</span>
         </div>

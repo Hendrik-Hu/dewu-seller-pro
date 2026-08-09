@@ -17,6 +17,7 @@ export interface Product {
   stock: number;
   imageUrl: string;
   imageStorageRef?: string;
+  deletedAt?: string;
   status: 'instock' | 'shipping' | 'sold' | 'flaw';
   location?: string;
   warehouse?: string;
@@ -27,7 +28,7 @@ export interface Product {
 
 export interface Activity {
   id: string;
-  type: 'inbound' | 'outbound' | 'pending';
+  type: 'inbound' | 'outbound' | 'pending' | 'restore';
   productName: string;
   time: string;
   sku: string;

@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { Product } from '../types';
 import { mapProductFromDb, mapProductToDb } from './mappers';
-import { deleteProductLocalMetadata, mergeProductsWithLocalMetadata, saveProductLocalMetadata } from './productMetadata';
+import { mergeProductsWithLocalMetadata, saveProductLocalMetadata } from './productMetadata';
 import { normalizeSku } from '../lib/productNormalization';
 import { resolveStorageImageUrl } from './storageImages';
 
@@ -33,7 +33,8 @@ export const listProducts = async ({
   let query = supabase
     .from('products')
     .select('*', { count: 'exact' })
-    .eq('user_id', userId);
+    .eq('user_id', userId)
+    .is('deleted_at', null);
 
   if (warehouse) {
     query = query.eq('warehouse', warehouse);
@@ -72,6 +73,7 @@ export const listAllProducts = async (userId: string): Promise<Product[]> => {
     .from('products')
     .select('*')
     .eq('user_id', userId)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false });
 
   if (error) throw error;
@@ -88,6 +90,7 @@ export const getWarehouseProductSummary = async (userId: string, warehouse: stri
     .select('price, stock')
     .eq('user_id', userId)
     .eq('warehouse', warehouse)
+    .is('deleted_at', null)
     .eq('status', 'instock');
 
   if (error) throw error;
@@ -122,12 +125,50 @@ export const upsertProduct = async (product: Product, userId: string) => {
 export const deleteProduct = async (productId: string, userId: string) => {
   const { error } = await supabase
     .from('products')
-    .delete()
+    .update({ deleted_at: new Date().toISOString() })
     .eq('id', productId)
     .eq('user_id', userId);
 
   if (error) throw error;
-  await deleteProductLocalMetadata(userId, productId);
+};
+
+export const listDeletedProducts = async (userId: string): Promise<Product[]> => {
+  const { data, error } = await supabase
+    .from('products')
+    .select('*')
+    .eq('user_id', userId)
+    .not('deleted_at', 'is', null)
+    .order('deleted_at', { ascending: false });
+
+  if (error) throw error;
+  return Promise.all((data || []).map(async (row) => {
+    const product = mapProductFromDb(row);
+    return { ...product, imageUrl: await resolveStorageImageUrl(product.imageStorageRef || product.imageUrl) };
+  }));
+};
+
+export const listProductsForExport = async (userId: string): Promise<Product[]> => {
+  const { data, error } = await supabase
+    .from('products')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return (data || []).map(mapProductFromDb);
+};
+
+export const restoreProduct = async (productId: string, userId: string): Promise<{ merged: boolean; productId: string }> => {
+  const { data, error } = await supabase.rpc('restore_product', {
+    p_product_id: productId,
+    p_user_id: userId,
+  });
+
+  if (error) throw error;
+  return {
+    merged: Boolean(data?.merged),
+    productId: String(data?.product_id || productId),
+  };
 };
 
 export const updateProductStock = async (productId: string, userId: string, stock: number) => {

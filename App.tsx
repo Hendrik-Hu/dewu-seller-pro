@@ -6,6 +6,7 @@ import { Home } from './components/Home';
 import { ProductList } from './components/ProductList';
 import { Stats } from './components/Stats';
 import { Profile } from './components/Profile';
+import { RecycleBinModal } from './components/RecycleBinModal';
 import { AddProductModal } from './components/AddProductModal';
 import { OutboundModal } from './components/OutboundModal';
 import { PendingOrdersModal } from './components/PendingOrdersModal';
@@ -14,13 +15,14 @@ import { updateWidgetData } from './utils/widget';
 import { Tab, Product, Activity, Warehouse } from './types';
 import { supabase } from './lib/supabase';
 import { createInventoryActivity, listActivities } from './services/activities';
-import { batchUpdateProductStatus, deleteProduct, listAllProducts, syncProductMainImageBySku, upsertProduct } from './services/products';
+import { batchUpdateProductStatus, deleteProduct, listAllProducts, listProductsForExport, syncProductMainImageBySku, upsertProduct } from './services/products';
 import { outboundProduct } from './services/outbound';
 import { buildInventoryAnalytics } from './lib/inventoryMetrics';
 import { Loader2 } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { formatProductSize, normalizeProduct, sameInventoryVariant } from './lib/productNormalization';
 import { createProductImageRef, isProductImageRef } from './services/storageImages';
+import { buildInventoryCsv } from './lib/inventoryExport';
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -180,6 +182,7 @@ export default function App() {
   const [showOutboundModal, setShowOutboundModal] = useState(false);
   const [showPendingModal, setShowPendingModal] = useState(false);
   const [showWidgetModal, setShowWidgetModal] = useState(false);
+  const [showRecycleBin, setShowRecycleBin] = useState(false);
   
   // Warehouse State
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -437,8 +440,6 @@ export default function App() {
   };
 
   const handleDeleteProduct = async (productId: string) => {
-    if (!confirm('确定要删除该商品吗？')) return;
-    
     try {
       if (!session?.user?.id) return;
       await deleteProduct(productId, session.user.id);
@@ -449,7 +450,7 @@ export default function App() {
       
     } catch (error: any) {
       console.error('Delete error:', error);
-      alert('删除失败');
+      alert('移入回收站失败');
     }
   };
 
@@ -492,11 +493,30 @@ export default function App() {
       setRefreshTrigger(prev => prev + 1);
       setShowAddModal(false);
       setEditingProduct(null);
-      alert(`已删除 ${productIds.length} 个商品`);
+      alert(`已将 ${productIds.length} 个商品移入回收站`);
     } catch (error: any) {
       console.error('Batch delete error:', error);
-      alert(`批量删除失败: ${error.message || '请稍后重试'}`);
+      alert(`批量移入回收站失败: ${error.message || '请稍后重试'}`);
       throw error;
+    }
+  };
+
+  const handleExportProducts = async () => {
+    if (!session?.user?.id) return;
+    try {
+      const exportProducts = await listProductsForExport(session.user.id);
+      const blob = new Blob([buildInventoryCsv(exportProducts)], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `dewu-inventory-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error: any) {
+      alert(`导出失败：${error?.message || '请稍后重试'}`);
     }
   };
 
@@ -670,6 +690,9 @@ export default function App() {
             onLogout={handleLogout}
             email={session?.user?.email}
             onWidgetClick={() => setShowWidgetModal(true)}
+            onRecycleBinClick={() => setShowRecycleBin(true)}
+            onExportClick={handleExportProducts}
+            appVersion={__APP_VERSION__}
           />
         );
       default:
@@ -736,6 +759,15 @@ export default function App() {
               onClose={() => setShowPendingModal(false)}
               products={products}
               onCompletePending={handleCompletePendingProducts}
+            />
+            <RecycleBinModal
+              isOpen={showRecycleBin}
+              onClose={() => setShowRecycleBin(false)}
+              userId={session.user.id}
+              onRestored={() => {
+                fetchData();
+                setRefreshTrigger((value) => value + 1);
+              }}
             />
             <WidgetSettingsModal
               isOpen={showWidgetModal}
