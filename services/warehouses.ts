@@ -13,46 +13,33 @@ export const listWarehouses = async (userId: string): Promise<Warehouse[]> => {
   return (data || []).map(mapWarehouseFromDb);
 };
 
-export const createDefaultWarehouses = async (userId: string): Promise<Warehouse[]> => {
-  const defaults = ['鏉窞涓€鍙蜂粨', '涓婃捣娴︿笢浠?', '鍖椾含澶у叴浠?', '骞垮窞鐧戒簯浠?'];
-
-  const { data, error } = await supabase
-    .from('warehouses')
-    .insert(defaults.map((name, index) => ({
-      name,
-      user_id: userId,
-      created_at: new Date().toISOString(),
-      is_default: index === 0,
-    })))
-    .select('id, name, is_default');
-
-  if (error) throw error;
-  return (data || []).map(mapWarehouseFromDb);
+const requireWarehouseResult = (data: unknown): Warehouse => {
+  if (!data || typeof data !== 'object') throw new Error('仓库操作未返回有效结果');
+  return mapWarehouseFromDb(data);
 };
 
-export const renameWarehouse = async (userId: string, id: string, name: string) => {
-  const { error } = await supabase
-    .from('warehouses')
-    .update({ name })
-    .eq('id', id)
-    .eq('user_id', userId);
-
+export const createWarehouse = async (name: string): Promise<Warehouse> => {
+  const { data, error } = await supabase.rpc('create_warehouse', { p_name: name });
   if (error) throw error;
+  return requireWarehouseResult(data);
 };
 
-export const setDefaultWarehouse = async (userId: string, id: string) => {
-  const { error: resetError } = await supabase
-    .from('warehouses')
-    .update({ is_default: false })
-    .eq('user_id', userId);
+export const renameWarehouse = async (id: string, name: string): Promise<Warehouse> => {
+  const { data, error } = await supabase.rpc('rename_warehouse', {
+    p_warehouse_id: id,
+    p_name: name,
+  });
+  if (error) throw error;
+  return requireWarehouseResult(data);
+};
 
-  if (resetError) throw resetError;
+export const setDefaultWarehouse = async (id: string): Promise<Warehouse> => {
+  const { data, error } = await supabase.rpc('set_default_warehouse', { p_warehouse_id: id });
+  if (error) throw error;
+  return requireWarehouseResult(data);
+};
 
-  const { error } = await supabase
-    .from('warehouses')
-    .update({ is_default: true })
-    .eq('id', id)
-    .eq('user_id', userId);
-
+export const deleteWarehouse = async (id: string): Promise<void> => {
+  const { error } = await supabase.rpc('delete_warehouse', { p_warehouse_id: id });
   if (error) throw error;
 };

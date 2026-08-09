@@ -19,6 +19,8 @@ interface AddProductModalProps {
 const DRAFT_KEY = 'addProductDraftV2';
 const getDraftKey = (userId: string) => `${DRAFT_KEY}:${userId}`;
 const createDraftId = () => globalThis.crypto?.randomUUID?.() || `draft-${Date.now()}`;
+const getInitialWarehouseName = (warehouses: Warehouse[]) =>
+  warehouses.find((warehouse) => warehouse.is_default)?.name || warehouses[0]?.name || '';
 
 interface AdditionalVariant {
   id: string;
@@ -44,7 +46,7 @@ const createEmptyDraft = (warehouses: Warehouse[]): Partial<Product> => ({
   stock: undefined,
   status: 'instock',
   location: '',
-  warehouse: warehouses[0]?.name || '杭州一号仓',
+  warehouse: getInitialWarehouseName(warehouses),
   source: '',
   imageUrl: '',
   imageDataUrl: '',
@@ -104,7 +106,9 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
           setProductData({
             ...createEmptyDraft(warehouses),
             ...parsed,
-            warehouse: parsed.warehouse || warehouses[0]?.name || '杭州一号仓',
+            warehouse: warehouses.some((warehouse) => warehouse.name === parsed.warehouse)
+              ? parsed.warehouse
+              : getInitialWarehouseName(warehouses),
           });
           setAdditionalVariants(restoredVariants);
           return;
@@ -249,6 +253,11 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   };
 
   const handleSave = async () => {
+    if (warehouses.length === 0) {
+      alert('请先关闭窗口，在库存页点击右上角加号创建仓库。');
+      return;
+    }
+
     const requiredFields: Array<[string, unknown]> = [
       ['货号', productData.sku],
       ['商品名称', productData.name],
@@ -262,6 +271,11 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
     const missingField = requiredFields.find(([, value]) => value === undefined || value === null || value === '');
     if (missingField) {
       alert(`请先填写必填项：${missingField[0]}`);
+      return;
+    }
+
+    if (!warehouses.some((warehouse) => warehouse.name === productData.warehouse)) {
+      alert('所选仓库已不存在，请重新选择有效仓库');
       return;
     }
 
@@ -317,7 +331,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       imageFile: selectedImageFile || undefined,
       status: productData.status || 'instock',
       location: productData.location || '待分配',
-      warehouse: productData.warehouse || '杭州一号仓',
+      warehouse: productData.warehouse || '',
       source: productData.source || '',
     };
 
@@ -477,6 +491,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 value={productData.warehouse}
                 onChange={(event) => updateProductData({ warehouse: event.target.value })}
               >
+                {warehouses.length === 0 && <option value="">请先创建仓库</option>}
                 {warehouses.map((warehouse) => (
                   <option key={warehouse.id} value={warehouse.name}>{warehouse.name}</option>
                 ))}

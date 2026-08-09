@@ -7,8 +7,11 @@ import {
   DataRepairAudit,
   listDataHealthIssues,
   listDataRepairAudit,
+  repairOrphanProductWarehouse,
   repairDataHealthIssue,
 } from '../services/dataHealth';
+import { listWarehouses } from '../services/warehouses';
+import { Warehouse } from '../types';
 
 interface DataHealthModalProps {
   isOpen: boolean;
@@ -20,11 +23,13 @@ interface DataHealthModalProps {
 export const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, userId, onClose, onRepaired }) => {
   const [issues, setIssues] = useState<DataHealthIssue[]>([]);
   const [audit, setAudit] = useState<DataRepairAudit[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [view, setView] = useState<'issues' | 'history'>('issues');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newValue, setNewValue] = useState('');
   const [reason, setReason] = useState('');
   const [targetStatus, setTargetStatus] = useState<DataHealthIssue['status'] | ''>('');
+  const [targetWarehouseId, setTargetWarehouseId] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -33,12 +38,14 @@ export const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, userId
     setLoading(true);
     setError('');
     try {
-      const [nextIssues, nextAudit] = await Promise.all([
+      const [nextIssues, nextAudit, nextWarehouses] = await Promise.all([
         listDataHealthIssues(userId),
         listDataRepairAudit(userId),
+        listWarehouses(userId),
       ]);
       setIssues(nextIssues);
       setAudit(nextAudit);
+      setWarehouses(nextWarehouses);
     } catch (err: any) {
       setError(err?.message || '数据体检加载失败');
     } finally {
@@ -51,14 +58,47 @@ export const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, userId
   }, [isOpen, userId]);
 
   const startRepair = (issue: DataHealthIssue) => {
-    setEditingId(`${issue.table}:${issue.id}`);
+    setEditingId(`${issue.issueType}:${issue.table}:${issue.id}`);
     setNewValue('');
     setReason('');
     setTargetStatus('');
+    setTargetWarehouseId('');
     setError('');
   };
 
   const submitRepair = async (issue: DataHealthIssue) => {
+    if (issue.issueType === 'orphan_warehouse') {
+      if (!targetWarehouseId) {
+        setError('请选择核对后的目标仓库');
+        return;
+      }
+      if (reason.trim().length < 3) {
+        setError('请填写核对依据');
+        return;
+      }
+      const target = warehouses.find((warehouse) => warehouse.id === targetWarehouseId);
+      if (!target) {
+        setError('目标仓库已不存在，请重新选择');
+        return;
+      }
+      if (!window.confirm(`确认把“${issue.warehouse}”下的这条库存归入“${target.name}”？数量和状态不会改变，并会写入审计记录。`)) return;
+      setSaving(true);
+      setError('');
+      try {
+        await repairOrphanProductWarehouse(userId, issue.id, targetWarehouseId, reason.trim());
+        setEditingId(null);
+        setTargetWarehouseId('');
+        setReason('');
+        await refresh();
+        onRepaired();
+      } catch (err: any) {
+        setError(err?.message || '仓库修复失败');
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
     const validation = validateDataRepairInput(issue.table, newValue, reason, targetStatus);
     if (validation.error || validation.value == null) {
       setError(validation.error || '请检查修正内容');
@@ -76,6 +116,7 @@ export const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, userId
       setNewValue('');
       setReason('');
       setTargetStatus('');
+      setTargetWarehouseId('');
       await refresh();
       onRepaired();
     } catch (err: any) {
@@ -136,7 +177,7 @@ export const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, userId
             ) : (
               <div className="space-y-3">
                 {issues.map((issue) => {
-                  const key = `${issue.table}:${issue.id}`;
+                  const key = `${issue.issueType}:${issue.table}:${issue.id}`;
                   const isEditing = editingId === key;
                   return (
                     <div key={key} className="rounded-lg border border-amber-100 bg-white p-3 dark:border-amber-900/30 dark:bg-zinc-900">
@@ -148,7 +189,11 @@ export const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, userId
                           </div>
                           <p className="mt-1 text-xs text-slate-600 dark:text-zinc-300">{issue.sku || '无货号'} · {formatProductSize(issue.size)} · {issue.warehouse}</p>
                           <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">
-                            {issue.table === 'products' ? '异常类型：负库存' : '异常类型：非正数流水'} · 原值 {issue.value}
+                            {issue.issueType === 'orphan_warehouse'
+                              ? '异常类型：仓库不存在'
+                              : issue.table === 'products'
+                                ? '异常类型：负库存'
+                                : '异常类型：非正数流水'} · {issue.issueType === 'orphan_warehouse' ? `当前库存 ${issue.value}` : `原值 ${issue.value}`}
                           </p>
                           {issue.table === 'products' ? (
                             <p className="mt-1 text-xs text-slate-500">当前状态：{statusLabel(issue.status)}</p>
@@ -160,17 +205,26 @@ export const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, userId
                           <p className="mt-1 break-all text-[10px] text-slate-400">{issue.table} / {issue.id}</p>
                           <p className="mt-1 text-[10px] text-slate-400">{issue.createdAt ? new Date(issue.createdAt).toLocaleString('zh-CN') : '时间未知'}</p>
                           <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">{issue.suggestion}</p>
-                          <p className="mt-1 text-[11px] text-red-500">当前记录已从正常库存和经营统计中排除；修正后统计会重新计算。</p>
+                          <p className="mt-1 text-[11px] text-red-500">
+                            {issue.issueType === 'orphan_warehouse'
+                              ? '当前记录无法在仓库列表中查看；修复只更正仓库归属，不改变库存数量。'
+                              : '当前记录已从正常库存和经营统计中排除；修正后统计会重新计算。'}
+                          </p>
                         </div>
                         {!isEditing && <button onClick={() => startRepair(issue)} className="shrink-0 rounded-lg bg-slate-900 px-3 py-1.5 text-xs text-white dark:bg-cyan-600">核对修正</button>}
                       </div>
                       {isEditing && (
                         <div className="mt-3 space-y-2 border-t border-slate-100 pt-3 dark:border-zinc-800">
-                          <input type="number" step="1" min={issue.table === 'products' ? 0 : 1} value={newValue} onChange={(event) => {
+                          {issue.issueType === 'orphan_warehouse' ? (
+                            <select value={targetWarehouseId} onChange={(event) => setTargetWarehouseId(event.target.value)} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-white" aria-label="核对后的目标仓库">
+                              <option value="">选择核对后的目标仓库</option>
+                              {warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}{warehouse.is_default ? '（主仓）' : ''}</option>)}
+                            </select>
+                          ) : <input type="number" step="1" min={issue.table === 'products' ? 0 : 1} value={newValue} onChange={(event) => {
                             setNewValue(event.target.value);
                             setTargetStatus('');
-                          }} placeholder={issue.table === 'products' ? '填写核对后的实际库存' : '填写核对后的流水数量'} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-white" aria-label="修正后的数量" />
-                          {issue.table === 'products' && (
+                          }} placeholder={issue.table === 'products' ? '填写核对后的实际库存' : '填写核对后的流水数量'} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-white" aria-label="修正后的数量" />}
+                          {issue.table === 'products' && issue.issueType !== 'orphan_warehouse' && (
                             <select disabled={!newValue.trim()} value={targetStatus} onChange={(event) => setTargetStatus(event.target.value as DataHealthIssue['status'] | '')} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-400 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white dark:disabled:bg-zinc-900" aria-label="修正后的商品状态">
                               <option value="">{newValue.trim() ? '选择修正后的商品状态' : '请先填写实际库存'}</option>
                               {newValue.trim() && Number(newValue) === 0 ? (
@@ -204,8 +258,8 @@ export const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, userId
               {audit.map((item) => (
                 <div key={item.id} className="rounded-lg border border-slate-100 bg-white p-3 text-xs dark:border-zinc-800 dark:bg-zinc-900">
                   <div className="font-medium text-slate-700 dark:text-zinc-200">{item.targetTable} / {item.recordId}</div>
-                  <div className="mt-1 text-slate-500">{item.oldValue} → {item.newValue} · {item.reason}</div>
-                  {(item.oldStatus || item.newStatus) && <div className="mt-1 text-slate-500">状态：{statusLabel(item.oldStatus)} → {statusLabel(item.newStatus)}</div>}
+                  <div className="mt-1 text-slate-500">{item.isWarehouseRepair ? item.reason : `${item.oldValue} → ${item.newValue} · ${item.reason}`}</div>
+                  {!item.isWarehouseRepair && (item.oldStatus || item.newStatus) && <div className="mt-1 text-slate-500">状态：{statusLabel(item.oldStatus)} → {statusLabel(item.newStatus)}</div>}
                   <div className="mt-1 text-[10px] text-slate-400">{new Date(item.createdAt).toLocaleString('zh-CN')}</div>
                 </div>
               ))}

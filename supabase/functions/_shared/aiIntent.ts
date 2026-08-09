@@ -1,5 +1,8 @@
 export type InventoryExecutionType = "inbound" | "outbound";
 
+export const requiresWarehouseSetup = (message: string, warehouseCount: number) =>
+  warehouseCount === 0 && /入库|进货|补货|新增库存|出库|卖了|卖掉|卖出|售出|发货/.test(message.trim().toLowerCase());
+
 export const evaluateExplicitExecutionIntent = (
   message: string,
   actionType: InventoryExecutionType,

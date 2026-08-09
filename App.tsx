@@ -28,6 +28,8 @@ import { parseRecoveryUrl } from './lib/authRecovery';
 import { SystemBars } from './lib/systemBars';
 import { formatProductSize, normalizeProduct, sameInventoryVariant } from './lib/productNormalization';
 import { createProductImageRef, isProductImageRef } from './services/storageImages';
+import { createWarehouse, deleteWarehouse, listWarehouses, renameWarehouse, setDefaultWarehouse } from './services/warehouses';
+import { countOrphanWarehouseProducts } from './services/dataHealth';
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -230,6 +232,7 @@ export default function App() {
   
   // Warehouse State
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [orphanWarehouseIssueCount, setOrphanWarehouseIssueCount] = useState(0);
   const inventoryAnalytics = buildInventoryAnalytics(products, activities);
 
   const dataUrlToFile = async (dataUrl: string, fileName: string) => {
@@ -268,38 +271,7 @@ export default function App() {
   const fetchWarehouses = async () => {
     if (!session?.user?.id) return;
     try {
-      const { data, error } = await supabase
-        .from('warehouses')
-        .select('id, name, is_default')
-        .eq('user_id', session.user.id)
-        .order('created_at', { ascending: true });
-        
-      if (error) throw error;
-
-      if (data && data.length > 0) {
-        setWarehouses(data);
-      } else {
-         // Initialize default warehouses if none exist
-         // We do this check locally first to avoid race conditions if possible, 
-         // but best practice is Unique Constraint in DB.
-         const defaults = ['杭州一号仓', '上海浦东仓', '北京大兴仓', '广州白云仓'];
-         
-         // Sequential insert to avoid race condition on 'empty' check
-         // Or just insert and ignore error.
-         const { data: newData, error: insertError } = await supabase
-           .from('warehouses')
-           .insert(defaults.map((name, index) => ({
-             name,
-             user_id: session.user.id,
-             created_at: new Date().toISOString(),
-             is_default: index === 0 // Make the first one default
-           })))
-           .select('id, name, is_default'); // Select back the IDs
-           
-         if (!insertError && newData) {
-           setWarehouses(newData);
-         }
-      }
+      setWarehouses(await listWarehouses(session.user.id));
     } catch (error) {
       console.error('Error fetching warehouses:', error);
     }
@@ -313,81 +285,26 @@ export default function App() {
 
   const handleSetDefaultWarehouse = async (id: string) => {
     try {
-      // 1. Optimistic Update
-      setWarehouses(prev => prev.map(w => ({
-        ...w,
-        is_default: w.id === id
-      })));
-
-      // 2. Update DB
-      // First, set all to false
-      const { error: resetError } = await supabase
-        .from('warehouses')
-        .update({ is_default: false })
-        .eq('user_id', session?.user?.id);
-
-      if (resetError) throw resetError;
-
-      // Then set target to true
-      const { error } = await supabase
-        .from('warehouses')
-        .update({ is_default: true })
-        .eq('id', id)
-        .eq('user_id', session?.user?.id);
-
-      if (error) throw error;
-      
+      await setDefaultWarehouse(id);
+      await fetchWarehouses();
       alert('已设置默认仓库');
-      
-      // Force refresh warehouses from DB to ensure consistency
-      fetchWarehouses();
     } catch (error: any) {
       console.error('Set default warehouse error:', error);
-      alert('设置失败');
-      fetchWarehouses(); // Rollback on error
+      alert(`设置失败：${error?.message || '请稍后重试'}`);
+      await fetchWarehouses();
     }
   };
 
-  const handleRenameWarehouse = async (id: string, oldName: string, newName: string) => {
+  const handleRenameWarehouse = async (id: string, _oldName: string, newName: string) => {
     try {
-        // 1. Update local state
-        setWarehouses(prev => prev.map(w => w.id === id ? { ...w, name: newName } : w));
-        
-        // 2. Update Warehouse Table (using ID for uniqueness)
-        const { error: whError } = await supabase
-            .from('warehouses')
-            .update({ name: newName })
-            .eq('id', id)
-            .eq('user_id', session?.user?.id);
-            
-        if (whError) throw whError;
-
-        // 3. Update Products (still using Name reference)
-        const { error: prodError } = await supabase
-            .from('products')
-            .update({ warehouse: newName })
-            .eq('warehouse', oldName) // This might update products in other warehouses if names were duplicates, but that's expected behavior for name-based FK simulation
-            .eq('user_id', session?.user?.id);
-        
-        if (prodError) throw prodError;
-
-        // 4. Update Activities
-        const { error: actError } = await supabase
-            .from('activities')
-            .update({ warehouse: newName })
-            .eq('warehouse', oldName)
-            .eq('user_id', session?.user?.id);
-            
-        if (actError) throw actError;
-
-        // 5. Refresh data
-        fetchData();
-        setRefreshTrigger(prev => prev + 1);
-        alert('仓库名称修改成功');
-
+      await renameWarehouse(id, newName);
+      await Promise.all([fetchWarehouses(), fetchData()]);
+      setRefreshTrigger(prev => prev + 1);
+      alert('仓库名称修改成功，历史流水名称保持不变');
     } catch (error: any) {
-        console.error('Rename warehouse error:', error);
-        alert(`修改失败: ${error.message}`);
+      console.error('Rename warehouse error:', error);
+      alert(`修改失败：${error?.message || '请稍后重试'}`);
+      await fetchWarehouses();
     }
   };
 
@@ -548,32 +465,26 @@ export default function App() {
 
   const handleAddWarehouse = async (name: string) => {
     const trimmedName = name.trim();
-    if (!trimmedName || !session?.user?.id) return;
+    if (!trimmedName || !session?.user?.id) throw new Error('请输入仓库名称');
+    const created = await createWarehouse(trimmedName);
+    await fetchWarehouses();
+    return created;
+  };
 
-    if (warehouses.length >= 6) {
-      throw new Error('最多允许设置 6 个仓库');
+  const handleDeleteWarehouse = async (id: string) => {
+    await deleteWarehouse(id);
+    await fetchWarehouses();
+    setRefreshTrigger((value) => value + 1);
+  };
+
+  const handleInboundEntry = () => {
+    if (warehouses.length === 0) {
+      setCurrentTab(Tab.PRODUCTS);
+      alert('请先在库存页点击右上角加号，创建真实仓库后再入库。');
+      return;
     }
-
-    if (warehouses.some((warehouse) => warehouse.name === trimmedName)) {
-      throw new Error('仓库名称已存在');
-    }
-
-    const { data, error } = await supabase
-      .from('warehouses')
-      .insert({
-        name: trimmedName,
-        user_id: session.user.id,
-        created_at: new Date().toISOString(),
-        is_default: false,
-      })
-      .select('id, name, is_default')
-      .single();
-
-    if (error) throw error;
-
-    if (data) {
-      setWarehouses((prev) => [...prev, data]);
-    }
+    setEditingProduct(null);
+    setShowAddModal(true);
   };
 
   const handleBatchDeleteProducts = async (productIds: string[]) => {
@@ -639,13 +550,15 @@ export default function App() {
     if (!session?.user?.id) return;
     setIsLoading(true);
     try {
-      const [productsData, typedActivities] = await Promise.all([
+      const [productsData, typedActivities, orphanCount] = await Promise.all([
         listAllProducts(session.user.id),
         listActivities(session.user.id),
+        countOrphanWarehouseProducts(),
       ]);
 
       setProducts(productsData || []);
       setActivities(typedActivities || []);
+      setOrphanWarehouseIssueCount(orphanCount);
 
     } catch (error) {
       console.error('Fetch data error:', error);
@@ -697,10 +610,7 @@ export default function App() {
             warehouses={warehouses}
             username={userProfile.name}
             avatarUrl={userProfile.avatar}
-            onInboundClick={() => {
-              setEditingProduct(null);
-              setShowAddModal(true);
-            }} 
+            onInboundClick={handleInboundEntry}
             onOutboundClick={() => setShowOutboundModal(true)}
             onPendingClick={() => setShowPendingModal(true)}
             activities={activities}
@@ -719,10 +629,7 @@ export default function App() {
         return (
           <ProductList 
             userId={session.user.id}
-            onAddClick={() => {
-              setEditingProduct(null);
-              setShowAddModal(true);
-            }}
+            onAddClick={handleInboundEntry}
             onEditProduct={handleEditClick}
             onTransferProduct={(product) => {
               setTransferProductTarget(product);
@@ -734,6 +641,7 @@ export default function App() {
             onRenameWarehouse={handleRenameWarehouse}
             onSetDefaultWarehouse={handleSetDefaultWarehouse}
             onAddWarehouse={handleAddWarehouse}
+            onDeleteWarehouse={handleDeleteWarehouse}
             refreshTrigger={refreshTrigger}
           />
         );
@@ -767,7 +675,7 @@ export default function App() {
             onExportClick={() => setShowBackupRestore(true)}
             onDataHealthClick={() => setShowDataHealth(true)}
             onFeeSchemesClick={() => setShowFeeSchemes(true)}
-            dataIssueCount={inventoryAnalytics.dataQuality.negativeStockCount + inventoryAnalytics.dataQuality.invalidActivityCount}
+            dataIssueCount={inventoryAnalytics.dataQuality.negativeStockCount + inventoryAnalytics.dataQuality.invalidActivityCount + orphanWarehouseIssueCount}
             appVersion={__APP_VERSION__}
           />
         );
@@ -777,7 +685,7 @@ export default function App() {
             warehouses={warehouses}
             username={userProfile.name}
             avatarUrl={userProfile.avatar}
-            onInboundClick={() => setShowAddModal(true)} 
+            onInboundClick={handleInboundEntry}
             onOutboundClick={() => setShowOutboundModal(true)}
             onPendingClick={() => setShowPendingModal(true)}
             activities={activities}

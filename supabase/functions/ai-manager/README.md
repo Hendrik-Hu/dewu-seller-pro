@@ -44,7 +44,7 @@ Dify `result` should return JSON in this shape:
         "cost": 749,
         "name": "Nike Dunk Low Panda",
         "brand": "Nike",
-        "warehouse": "杭州一号仓"
+        "warehouse": "主仓库"
       }
     }
   ]

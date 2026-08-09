@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { readHostedApiKey } from "../_shared/apiKeys.ts";
-import { evaluateExplicitExecutionIntent } from "../_shared/aiIntent.ts";
+import { evaluateExplicitExecutionIntent, requiresWarehouseSetup } from "../_shared/aiIntent.ts";
 import { buildAiInventorySummary, formatAiInventorySummaryAnswer } from "../_shared/aiInventorySummary.ts";
 import { isExecutablePlan } from "../_shared/aiPlanPolicy.ts";
 import { serializeAiContext } from "../_shared/aiContext.ts";
@@ -888,6 +888,22 @@ serve(async (req) => {
       if (deterministicAnswer) {
         return jsonResponse({
           reply: deterministicAnswer,
+          actions: [],
+          plannedActions: [],
+          planToken: null,
+          planExpiresAt: null,
+          requiresConfirmation: false,
+          executionConfirmed: false,
+          dryRun: true,
+          executed: false,
+          executable: false,
+          agentSource: "authoritative",
+          agentWarning: null,
+        });
+      }
+      if (requiresWarehouseSetup(message, Array.isArray(context.warehouses) ? context.warehouses.length : 0)) {
+        return jsonResponse({
+          reply: "当前账号还没有仓库，暂不能执行库存操作。请先到“库存”页点击右上角加号创建真实仓库；第一个仓库会自动成为主仓。",
           actions: [],
           plannedActions: [],
           planToken: null,

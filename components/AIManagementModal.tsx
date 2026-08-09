@@ -248,7 +248,7 @@ export const AIManagementModal: React.FC<AIManagementModalProps> = ({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && requestPlan()}
-              placeholder="例如：Nike DD1391-100 42码 入库 2 双，成本 749，放杭州一号仓"
+              placeholder="例如：Nike DD1391-100 42码 入库 2 双，成本 749，放主仓库"
               className="flex-1 px-4 py-3 bg-slate-50 dark:bg-zinc-800 border-none rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 dark:text-white placeholder:text-slate-400"
               disabled={isLoading}
             />

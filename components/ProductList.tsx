@@ -14,9 +14,10 @@ interface ProductListProps {
   onDeleteProduct: (productId: string) => void;
   onBatchDeleteProducts: (productIds: string[]) => Promise<void>;
   warehouses: Warehouse[];
-  onRenameWarehouse: (id: string, oldName: string, newName: string) => void;
-  onSetDefaultWarehouse: (id: string) => void;
-  onAddWarehouse: (name: string) => Promise<void>;
+  onRenameWarehouse: (id: string, oldName: string, newName: string) => Promise<void>;
+  onSetDefaultWarehouse: (id: string) => Promise<void>;
+  onAddWarehouse: (name: string) => Promise<Warehouse>;
+  onDeleteWarehouse: (id: string) => Promise<void>;
   refreshTrigger: number;
 }
 
@@ -41,7 +42,7 @@ interface AggregatedProductGroup {
   sizeRows: AggregatedSizeRow[];
 }
 
-export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, onEditProduct, onTransferProduct, onDeleteProduct, onBatchDeleteProducts, warehouses, onRenameWarehouse, onSetDefaultWarehouse, onAddWarehouse, refreshTrigger }) => {
+export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, onEditProduct, onTransferProduct, onDeleteProduct, onBatchDeleteProducts, warehouses, onRenameWarehouse, onSetDefaultWarehouse, onAddWarehouse, onDeleteWarehouse, refreshTrigger }) => {
   const MAX_WAREHOUSES = 6;
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -53,7 +54,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
   // Initialize with default warehouse or first one
   const [currentWarehouse, setCurrentWarehouse] = useState(() => {
     const defaultWh = warehouses.find(w => w.is_default);
-    return defaultWh?.name || warehouses[0]?.name || '杭州一号仓';
+    return defaultWh?.name || warehouses[0]?.name || '';
   });
 
   const [showWarehouseMenu, setShowWarehouseMenu] = useState(false);
@@ -88,12 +89,20 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
              // For now, let's stick to "if invalid, reset". 
              // But the issue user reported "no warehouse shown" suggests currentWarehouse might be empty or invalid?
         }
+    } else {
+      setCurrentWarehouse('');
+      setProducts([]);
+      setTotalCount(0);
     }
   }, [warehouses]);
 
   // Fetch Products from Backend
   const fetchProducts = async () => {
-    if (!userId || !currentWarehouse) return;
+    if (!userId || !currentWarehouse) {
+      setProducts([]);
+      setTotalCount(0);
+      return;
+    }
 
     setIsLoading(true);
     try {
@@ -225,15 +234,31 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
     setNewWarehouseName(name);
   };
 
-  const saveWarehouseName = (e: React.MouseEvent | React.FormEvent, wh: Warehouse) => {
+  const saveWarehouseName = async (e: React.MouseEvent | React.FormEvent, wh: Warehouse) => {
     e.stopPropagation();
-    if (newWarehouseName && newWarehouseName !== wh.name) {
-        onRenameWarehouse(wh.id, wh.name, newWarehouseName);
-        if (currentWarehouse === wh.name) {
-            setCurrentWarehouse(newWarehouseName);
-        }
+    const trimmedName = newWarehouseName.trim();
+    if (trimmedName && trimmedName !== wh.name) {
+      try {
+        await onRenameWarehouse(wh.id, wh.name, trimmedName);
+        if (currentWarehouse === wh.name) setCurrentWarehouse(trimmedName);
+      } catch {
+        return;
+      }
     }
     setEditingWarehouse(null);
+  };
+
+  const handleDeleteWarehouse = async (e: React.MouseEvent, warehouse: Warehouse) => {
+    e.stopPropagation();
+    if (!confirm(`确定删除空仓库“${warehouse.name}”吗？有库存时系统会阻止删除。`)) return;
+    try {
+      await onDeleteWarehouse(warehouse.id);
+      setEditingWarehouse(null);
+      if (currentWarehouse === warehouse.name) setCurrentWarehouse('');
+      setShowWarehouseMenu(false);
+    } catch (error: any) {
+      alert(`删除仓库失败：${error?.message || '请稍后重试'}`);
+    }
   };
 
   const handleAddWarehouse = async (e: React.MouseEvent | React.FormEvent) => {
@@ -253,10 +278,10 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
 
     setIsAddingWarehouse(true);
     try {
-      await onAddWarehouse(trimmedName);
+      const created = await onAddWarehouse(trimmedName);
       setAddingWarehouseName('');
       setShowAddWarehouseForm(false);
-      setCurrentWarehouse(trimmedName);
+      setCurrentWarehouse(created.name);
       setCurrentPage(1);
       setShowWarehouseMenu(false);
     } catch (error: any) {
@@ -275,7 +300,10 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
 
   useEffect(() => {
     const fetchStats = async () => {
-        if (!userId || !currentWarehouse) return;
+        if (!userId || !currentWarehouse) {
+          setInventoryStats({ totalCount: 0, totalValue: 0, warehouseCount: 0, warehouseValue: 0 });
+          return;
+        }
 
         const { data } = await supabase
             .from('products')
@@ -473,12 +501,22 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
             <h1 className="text-xl font-bold text-slate-900 dark:text-white">库存管理</h1>
             <div className="relative">
               <button 
-                onClick={() => setShowWarehouseMenu(!showWarehouseMenu)}
-                className="flex items-center space-x-1.5 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 pl-3 pr-2 py-1.5 rounded-full text-xs font-bold text-slate-700 dark:text-zinc-200 shadow-sm active:bg-slate-50 dark:active:bg-zinc-800 transition-colors"
+                onClick={() => {
+                  const nextOpen = !showWarehouseMenu;
+                  setShowWarehouseMenu(nextOpen);
+                  if (warehouses.length === 0) setShowAddWarehouseForm(nextOpen);
+                }}
+                aria-label={warehouses.length === 0 ? '添加仓库' : '选择仓库'}
+                title={warehouses.length === 0 ? '添加仓库' : '选择仓库'}
+                className={warehouses.length === 0
+                  ? "flex h-9 w-9 items-center justify-center rounded-full border border-dashed border-dewu-300 bg-white text-dewu-600 shadow-sm dark:border-dewu-700 dark:bg-zinc-900 dark:text-dewu-400"
+                  : "flex items-center space-x-1.5 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 pl-3 pr-2 py-1.5 rounded-full text-xs font-bold text-slate-700 dark:text-zinc-200 shadow-sm active:bg-slate-50 dark:active:bg-zinc-800 transition-colors"}
               >
-                  <WarehouseIcon size={12} className="text-slate-400 dark:text-zinc-500" />
-                  <span>{currentWarehouse}</span>
-                  <ChevronDown size={14} className="text-slate-400 dark:text-zinc-500" />
+                  {warehouses.length === 0 ? <Plus size={17} /> : <>
+                    <WarehouseIcon size={12} className="text-slate-400 dark:text-zinc-500" />
+                    <span>{currentWarehouse}</span>
+                    <ChevronDown size={14} className="text-slate-400 dark:text-zinc-500" />
+                  </>}
               </button>
               
               {/* Warehouse Dropdown */}
@@ -491,6 +529,9 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                       setAddingWarehouseName('');
                   }}></div>
                   <div className="absolute right-0 top-full mt-2 w-52 bg-white dark:bg-zinc-900 rounded-xl shadow-xl border border-slate-100 dark:border-zinc-800 z-20 py-1.5 animate-[fadeIn_0.1s_ease-out] max-h-72 overflow-y-auto">
+                    {warehouses.length === 0 && !showAddWarehouseForm && (
+                      <p className="px-3 py-2 text-center text-[11px] text-slate-500 dark:text-zinc-400">暂无仓库，请先创建</p>
+                    )}
                     {warehouses.map(wh => (
                       <div 
                         key={wh.id}
@@ -514,8 +555,13 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                                 </button>
                             </div>
                         ) : (
-                            <button 
+                            <div
+                                role="button"
+                                tabIndex={0}
                                 onClick={() => handleWarehouseSelect(wh.name)}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter' || event.key === ' ') handleWarehouseSelect(wh.name);
+                                }}
                                 className="w-full text-left px-3 py-1.5 text-[11px] font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800 flex items-center justify-between group"
                             >
                                 <span className="truncate pr-2">{wh.name}</span>
@@ -537,14 +583,22 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                                         <Star size={10} fill={wh.is_default ? "currentColor" : "none"} />
                                     </button>
 
-                                    <div 
+                                    <button
                                         onClick={(e) => startEditingWarehouse(e, wh.name)}
                                         className="p-0.5 text-slate-300 hover:text-slate-600 dark:hover:text-zinc-400 hover:bg-slate-200 dark:hover:bg-zinc-700 rounded transition-colors"
+                                        title="重命名仓库"
                                     >
                                         <Edit size={10} />
-                                    </div>
+                                    </button>
+                                    <button
+                                      onClick={(e) => handleDeleteWarehouse(e, wh)}
+                                      className="p-0.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded transition-colors"
+                                      title="删除空仓库"
+                                    >
+                                      <Trash2 size={10} />
+                                    </button>
                                 </div>
-                            </button>
+                            </div>
                         )}
                       </div>
                     ))}
@@ -763,15 +817,23 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
             </div>
         ) : (
             <>
-                <p className="text-[10px] text-slate-400 dark:text-zinc-500 text-center mb-1">
+                {warehouses.length > 0 && <p className="text-[10px] text-slate-400 dark:text-zinc-500 text-center mb-1">
                   {isSelectionMode
                     ? '点击商品可勾选或取消勾选'
                     : isSearchGroupingMode
                       ? `该搜索下共有 ${aggregatedSearchResults.length} 款商品，${aggregatedSearchStockCount} 个库存`
                       : `点击或长按商品进行管理 · 每页 ${ITEMS_PER_PAGE} 条 · 共 ${totalCount} 条`}
-                </p>
+                </p>}
                 
-                {products.length === 0 && (
+                {warehouses.length === 0 ? (
+                    <div className="mx-auto mt-10 max-w-xs text-center">
+                      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-dewu-50 text-dewu-600 dark:bg-dewu-950/30 dark:text-dewu-400">
+                        <WarehouseIcon size={22} />
+                      </div>
+                      <h2 className="mt-3 text-sm font-semibold text-slate-900 dark:text-white">先创建你的第一个仓库</h2>
+                      <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-zinc-400">点击右上角加号填写真实仓库名称。首个仓库会自动成为主仓。</p>
+                    </div>
+                ) : products.length === 0 && (
                     <div className="text-center py-20 text-slate-400 dark:text-zinc-500 text-xs">
                         暂无符合条件的商品
                     </div>
@@ -1017,13 +1079,13 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
       </div>
 
       {/* FAB - Floating Action Button */}
-      <button 
+      {warehouses.length > 0 && <button
         onClick={onAddClick}
         disabled={isSelectionMode}
         className="fixed bottom-24 right-5 w-14 h-14 bg-slate-900 dark:bg-dewu-500 rounded-full shadow-lg shadow-slate-300 dark:shadow-none flex items-center justify-center text-white active:scale-90 transition-transform z-30"
       >
         <Plus size={28} />
-      </button>
+      </button>}
     </div>
   );
 };
