@@ -7,6 +7,7 @@ import { formatProductSize, normalizeSku } from '../lib/productNormalization';
 import { ProductImage } from './ProductImage';
 import { listFeeSchemes } from '../services/feeSchemes';
 import { calculateFeeQuote } from '../lib/feeCalculations';
+import { getFeeQuotePresentation } from '../lib/feeQuotePresentation';
 
 interface OutboundModalProps {
   isOpen: boolean;
@@ -89,6 +90,7 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, p
       });
     } catch { return undefined; }
   }, [manualFee, manualFeeEnabled, quantity, selectedProduct, selectedScheme, sellingPrice]);
+  const feeQuotePresentation = getFeeQuotePresentation(Boolean(selectedScheme), manualFeeEnabled);
 
   if (!isOpen) return null;
 
@@ -420,9 +422,9 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, p
                     <span className="text-slate-500">保本单价</span><strong className="text-right text-slate-800">{feeQuote.breakEvenUnitPrice == null ? '无法达到' : `¥${feeQuote.breakEvenUnitPrice.toFixed(2)}`}</strong>
                   </div>
                   {selectedScheme && <p className="mt-2 border-t border-emerald-100 pt-2 text-[10px] leading-4 text-slate-500">比例费{selectedScheme.percentageUnit === 'item' ? `按件 ×${quantity}` : '按本次交易 ×1'}；固定费{selectedScheme.fixedFeeUnit === 'item' ? `按件 ×${quantity}` : '按交易 ×1'}；运费{selectedScheme.shippingFeeUnit === 'item' ? `按件 ×${quantity}` : '按交易 ×1'}；其他费用{selectedScheme.otherFeeUnit === 'item' ? `按件 ×${quantity}` : '按交易 ×1'}{manualFeeEnabled ? '；最终采用手动总费用' : ''}</p>}
-                  {!selectedScheme && manualFeeEnabled && <p className="mt-2 border-t border-emerald-100 pt-2 text-[10px] leading-4 text-slate-500">未使用费用方案，本次按手动总费用估算。</p>}
+                  {feeQuotePresentation.source === 'manual' && <p className="mt-2 border-t border-emerald-100 pt-2 text-[10px] leading-4 text-slate-500">{feeQuotePresentation.message}</p>}
                 </div>
-              ) : <div className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-700">费用方案未配置，本次只记录成交额和毛利润；平台费用、到手与净利润保持未知。</div>
+              ) : <div className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-700">{feeQuotePresentation.message}</div>
             )}
 
             <p className="text-[10px] leading-4 text-slate-400">费用仅为估算，实际金额以平台出价页和订单结算明细为准。</p>
