@@ -9,6 +9,7 @@ import { Profile } from './components/Profile';
 import { RecycleBinModal } from './components/RecycleBinModal';
 import { TransferProductModal } from './components/TransferProductModal';
 import { DataHealthModal } from './components/DataHealthModal';
+import { BackupRestoreModal } from './components/BackupRestoreModal';
 import { AddProductModal } from './components/AddProductModal';
 import { OutboundModal } from './components/OutboundModal';
 import { PendingOrdersModal } from './components/PendingOrdersModal';
@@ -17,14 +18,13 @@ import { updateWidgetData } from './utils/widget';
 import { Tab, Product, Activity, Warehouse } from './types';
 import { supabase } from './lib/supabase';
 import { createInventoryActivity, listActivities } from './services/activities';
-import { batchInboundProducts, batchUpdateProductStatus, deleteProduct, listAllProducts, listProductsForExport, syncProductMainImageBySku, upsertProduct } from './services/products';
+import { batchInboundProducts, batchUpdateProductStatus, deleteProduct, listAllProducts, syncProductMainImageBySku, upsertProduct } from './services/products';
 import { outboundProduct } from './services/outbound';
 import { buildInventoryAnalytics } from './lib/inventoryMetrics';
 import { Loader2 } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { formatProductSize, normalizeProduct, sameInventoryVariant } from './lib/productNormalization';
 import { createProductImageRef, isProductImageRef } from './services/storageImages';
-import { buildInventoryCsv } from './lib/inventoryExport';
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -184,6 +184,7 @@ export default function App() {
   const [showWidgetModal, setShowWidgetModal] = useState(false);
   const [showRecycleBin, setShowRecycleBin] = useState(false);
   const [showDataHealth, setShowDataHealth] = useState(false);
+  const [showBackupRestore, setShowBackupRestore] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transferProductTarget, setTransferProductTarget] = useState<Product | null>(null);
   
@@ -552,25 +553,6 @@ export default function App() {
     }
   };
 
-  const handleExportProducts = async () => {
-    if (!session?.user?.id) return;
-    try {
-      const exportProducts = await listProductsForExport(session.user.id);
-      const blob = new Blob([buildInventoryCsv(exportProducts)], { type: 'text/csv;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `dewu-inventory-${new Date().toISOString().slice(0, 10)}.csv`;
-      link.style.display = 'none';
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (error: any) {
-      alert(`导出失败：${error?.message || '请稍后重试'}`);
-    }
-  };
-
   const handleCompletePendingProducts = async (productIds: string[]) => {
     if (!session?.user?.id || productIds.length === 0) return;
 
@@ -756,7 +738,7 @@ export default function App() {
             email={session?.user?.email}
             onWidgetClick={() => setShowWidgetModal(true)}
             onRecycleBinClick={() => setShowRecycleBin(true)}
-            onExportClick={handleExportProducts}
+            onExportClick={() => setShowBackupRestore(true)}
             onDataHealthClick={() => setShowDataHealth(true)}
             dataIssueCount={inventoryAnalytics.dataQuality.negativeStockCount + inventoryAnalytics.dataQuality.invalidActivityCount}
             appVersion={__APP_VERSION__}
@@ -842,6 +824,15 @@ export default function App() {
               userId={session.user.id}
               onClose={() => setShowDataHealth(false)}
               onRepaired={() => {
+                fetchData();
+                setRefreshTrigger((value) => value + 1);
+              }}
+            />
+            <BackupRestoreModal
+              isOpen={showBackupRestore}
+              userId={session.user.id}
+              onClose={() => setShowBackupRestore(false)}
+              onRestored={() => {
                 fetchData();
                 setRefreshTrigger((value) => value + 1);
               }}

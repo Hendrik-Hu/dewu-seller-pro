@@ -4,6 +4,7 @@ import { mapProductFromDb, mapProductToDb } from './mappers';
 import { mergeProductsWithLocalMetadata, saveProductLocalMetadata } from './productMetadata';
 import { normalizeSku } from '../lib/productNormalization';
 import { resolveStorageImageUrl } from './storageImages';
+import { fetchAllPages } from './pagination';
 
 export interface ListProductsParams {
   userId: string;
@@ -150,14 +151,14 @@ export const listDeletedProducts = async (userId: string): Promise<Product[]> =>
 };
 
 export const listProductsForExport = async (userId: string): Promise<Product[]> => {
-  const { data, error } = await supabase
+  const rows = await fetchAllPages((from, to) => supabase
     .from('products')
-    .select('*')
+    .select('*', { count: 'exact' })
     .eq('user_id', userId)
-    .order('created_at', { ascending: false });
-
-  if (error) throw error;
-  return (data || []).map(mapProductFromDb);
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
+    .range(from, to), { getKey: (row: any) => String(row.id), label: '库存 CSV' });
+  return rows.map(mapProductFromDb);
 };
 
 export const restoreProduct = async (productId: string, userId: string): Promise<{ merged: boolean; productId: string }> => {

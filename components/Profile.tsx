@@ -67,7 +67,7 @@ export const Profile: React.FC<ProfileProps> = ({
         action: onDataHealthClick,
       },
       { icon: ArchiveRestore, label: '回收站', action: onRecycleBinClick },
-      { icon: Download, label: '导出库存快照', action: onExportClick },
+      { icon: Download, label: '导出与恢复', action: onExportClick },
     ],
     [
       { 
