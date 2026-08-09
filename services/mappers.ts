@@ -10,6 +10,7 @@ import {
   parseStoredStock,
 } from '../lib/productNormalization';
 import { isProductImageRef } from './storageImages';
+import { normalizeActivityCountForWrite } from '../lib/activityValidation';
 
 export const mapProductFromDb = (row: any): Product => ({
   id: row.id,
@@ -65,6 +66,7 @@ export const mapActivityFromDb = (row: any): Activity => ({
   warehouse: row.warehouse,
   count: row.count === undefined || row.count === null || row.count === '' ? undefined : Number(row.count),
   source: row.source || '',
+  platform: row.platform || '',
 });
 
 export const mapActivityToDb = (activity: Activity, userId: string) => ({
@@ -79,8 +81,9 @@ export const mapActivityToDb = (activity: Activity, userId: string) => ({
   image_url: activity.imageStorageRef || activity.imageUrl,
   created_at: activity.created_at || activity.createdAt || new Date().toISOString(),
   warehouse: activity.warehouse,
-  count: Number(activity.count || 1),
+  count: normalizeActivityCountForWrite(activity.count),
   source: activity.source || '',
+  platform: activity.platform || '',
   user_id: userId,
 });
 

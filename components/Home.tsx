@@ -1,13 +1,17 @@
 import React from 'react';
 import { ShoppingBag, Truck, Package, ArrowDownRight, ArrowUpRight, ChevronRight, Clock, Sparkles, UserRound } from 'lucide-react';
-import { Activity, Product } from '../types';
+import { Activity, Product, Warehouse } from '../types';
 import { InventoryStatsModal } from './InventoryStatsModal';
 import { AIManagementModal } from './AIManagementModal';
 import { getActivityGrossAmount, getActivityQuantity } from '../lib/inventoryMetrics';
 import { formatProductSize } from '../lib/productNormalization';
 import { ProductImage } from './ProductImage';
+import { ActivityLedgerModal } from './ActivityLedgerModal';
+import { getActivityTypeLabel } from '../lib/activityPresentation';
 
 interface HomeProps {
+  userId: string;
+  warehouses: Warehouse[];
   username: string;
   avatarUrl: string;
   onInboundClick: () => void;
@@ -24,6 +28,8 @@ interface HomeProps {
 }
 
 export const Home: React.FC<HomeProps> = ({ 
+  userId,
+  warehouses,
   username, 
   avatarUrl,
   onInboundClick, 
@@ -41,6 +47,7 @@ export const Home: React.FC<HomeProps> = ({
   // Inventory Modal State
   const [showInventoryModal, setShowInventoryModal] = React.useState(false);
   const [showAIModal, setShowAIModal] = React.useState(false);
+  const [showActivityLedger, setShowActivityLedger] = React.useState(false);
 
   const formatTime = (dateString?: string) => {
     if (!dateString) return '';
@@ -169,10 +176,20 @@ export const Home: React.FC<HomeProps> = ({
         onExecuted={onAIManageExecuted}
       />
 
+      <ActivityLedgerModal
+        isOpen={showActivityLedger}
+        userId={userId}
+        warehouses={warehouses}
+        onClose={() => setShowActivityLedger(false)}
+      />
+
       {/* Recent Activity */}
       <div>
         <div className="flex justify-between items-center px-1 mb-3">
           <h3 className="text-sm font-bold text-slate-900 dark:text-white">最近动态 (近10条)</h3>
+          <button onClick={() => setShowActivityLedger(true)} className="flex items-center gap-0.5 text-xs font-medium text-dewu-600 dark:text-dewu-400">
+            查看全部 <ChevronRight size={13} />
+          </button>
         </div>
         <div className="space-y-3">
           {activities.length === 0 ? (
@@ -196,13 +213,15 @@ export const Home: React.FC<HomeProps> = ({
                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                          activity.type === 'inbound'
                            ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+                           : activity.type === 'pending'
+                             ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400'
                            : activity.type === 'restore'
                              ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400'
                              : activity.type === 'transfer'
                                ? 'bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400'
                              : 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400'
                        }`}>
-                         {activity.type === 'inbound' ? '入库' : activity.type === 'restore' ? '恢复' : activity.type === 'transfer' ? '调拨' : '出库'}
+                         {getActivityTypeLabel(activity.type)}
                        </span>
                        <div className="flex items-center text-xs text-slate-500 dark:text-zinc-400">
                          <span>{activity.sku}</span>
@@ -213,7 +232,9 @@ export const Home: React.FC<HomeProps> = ({
                            </>
                          )}
                          <span className="mx-1.5 opacity-30">|</span>
-                         <span>x{activity.count || 1}</span>
+                         <span className={getActivityQuantity(activity) === 0 ? 'font-medium text-red-500' : ''}>
+                           {getActivityQuantity(activity) === 0 ? `异常 ${activity.count}` : `x${getActivityQuantity(activity)}`}
+                         </span>
                        </div>
                     </div>
                     {!['restore', 'transfer'].includes(activity.type) && <div className="text-right">

@@ -684,6 +684,8 @@ export default function App() {
       case Tab.HOME:
         return (
           <Home 
+            userId={session.user.id}
+            warehouses={warehouses}
             username={userProfile.name}
             avatarUrl={userProfile.avatar}
             onInboundClick={() => {
@@ -762,6 +764,8 @@ export default function App() {
         );
       default:
         return <Home 
+            userId={session.user.id}
+            warehouses={warehouses}
             username={userProfile.name}
             avatarUrl={userProfile.avatar}
             onInboundClick={() => setShowAddModal(true)} 

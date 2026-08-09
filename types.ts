@@ -42,6 +42,7 @@ export interface Activity {
   warehouse?: string;
   count?: number;
   source?: string;
+  platform?: string;
 }
 
 export interface SalesStat {

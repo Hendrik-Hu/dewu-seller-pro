@@ -28,6 +28,18 @@ export interface DataRepairAudit {
   newStatus?: string;
 }
 
+const mapDataRepairAudit = (row: any): DataRepairAudit => ({
+  id: String(row.id),
+  targetTable: String(row.target_table),
+  recordId: String(row.record_id),
+  oldValue: Number(row.old_value),
+  newValue: Number(row.new_value),
+  reason: String(row.reason),
+  createdAt: String(row.created_at),
+  oldStatus: row.old_status == null ? undefined : String(row.old_status),
+  newStatus: row.new_status == null ? undefined : String(row.new_status),
+});
+
 export const listDataHealthIssues = async (userId: string): Promise<DataHealthIssue[]> => {
   const [productsResult, activitiesResult] = await Promise.all([
     supabase.from('products').select('id,name,sku,size,warehouse,stock,status,created_at').eq('user_id', userId).lt('stock', 0).order('created_at'),
@@ -74,17 +86,19 @@ export const listDataRepairAudit = async (userId: string): Promise<DataRepairAud
     .order('created_at', { ascending: false })
     .limit(20);
   if (error) throw error;
-  return (data || []).map((row) => ({
-    id: String(row.id),
-    targetTable: String(row.target_table),
-    recordId: String(row.record_id),
-    oldValue: Number(row.old_value),
-    newValue: Number(row.new_value),
-    reason: String(row.reason),
-    createdAt: String(row.created_at),
-    oldStatus: row.old_status == null ? undefined : String(row.old_status),
-    newStatus: row.new_status == null ? undefined : String(row.new_status),
-  }));
+  return (data || []).map(mapDataRepairAudit);
+};
+
+export const listDataRepairAuditPage = async (userId: string, page = 1, pageSize = 30) => {
+  const from = (page - 1) * pageSize;
+  const { data, error, count } = await supabase
+    .from('data_repair_audit')
+    .select('id,target_table,record_id,old_value,new_value,reason,old_status,new_status,created_at', { count: 'exact' })
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .range(from, from + pageSize - 1);
+  if (error) throw error;
+  return { repairs: (data || []).map(mapDataRepairAudit), totalCount: count || 0 };
 };
 
 export const repairDataHealthIssue = async (
