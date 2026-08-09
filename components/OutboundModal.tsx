@@ -7,6 +7,7 @@ import { formatProductSize, normalizeSku } from '../lib/productNormalization';
 import { ProductImage } from './ProductImage';
 import { listFeeSchemes } from '../services/feeSchemes';
 import { calculateFeeQuote } from '../lib/feeCalculations';
+import { calculateTargetUnitPrice, type TargetPricingKind } from '../lib/targetPricing';
 import { getFeeQuotePresentation } from '../lib/feeQuotePresentation';
 
 interface OutboundModalProps {
@@ -37,6 +38,10 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, p
   const [draftReady, setDraftReady] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submittedSchemeUpdatedAt, setSubmittedSchemeUpdatedAt] = useState('');
+  const [targetPricingOpen, setTargetPricingOpen] = useState(false);
+  const [targetPricingKind, setTargetPricingKind] = useState<TargetPricingKind>('netProfit');
+  const [targetPricingValue, setTargetPricingValue] = useState('');
+  const [targetPricingRequested, setTargetPricingRequested] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -91,6 +96,24 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, p
     } catch { return undefined; }
   }, [manualFee, manualFeeEnabled, quantity, selectedProduct, selectedScheme, sellingPrice]);
   const feeQuotePresentation = getFeeQuotePresentation(Boolean(selectedScheme), manualFeeEnabled);
+  const targetPricing = useMemo(() => {
+    if (!targetPricingRequested || !selectedProduct) return { result: undefined, error: '' };
+    if (!targetPricingValue.trim()) return { result: undefined, error: '请输入目标值。' };
+    if (manualFeeEnabled && !manualFee.trim()) return { result: undefined, error: '请输入本次手动平台总费用。' };
+    try {
+      const result = calculateTargetUnitPrice({
+        kind: targetPricingKind,
+        target: Number(targetPricingValue),
+        unitCost: selectedProduct.price,
+        quantity,
+        scheme: selectedScheme,
+        manualFeeOverride: manualFeeEnabled ? normalizeSalePrice(manualFee) : undefined,
+      });
+      return { result, error: result ? '' : '在单价 100 万元以内无法达到这个目标。' };
+    } catch (error) {
+      return { result: undefined, error: error instanceof Error ? error.message : '暂时无法反算售价。' };
+    }
+  }, [manualFee, manualFeeEnabled, quantity, selectedProduct, selectedScheme, targetPricingKind, targetPricingRequested, targetPricingValue]);
 
   if (!isOpen) return null;
 
@@ -106,6 +129,9 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, p
     setDraftReady(false);
     setSubmitted(false);
     setSubmittedSchemeUpdatedAt('');
+    setTargetPricingOpen(false);
+    setTargetPricingValue('');
+    setTargetPricingRequested(false);
     onClose();
   };
 
@@ -116,6 +142,9 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, p
     setValidationError('');
     setDraftProductId(null);
     setDraftReady(false);
+    setTargetPricingOpen(false);
+    setTargetPricingValue('');
+    setTargetPricingRequested(false);
   };
 
   const handleConfirmOutbound = async () => {
@@ -407,6 +436,84 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, p
                 </select>
                 <label className="mt-2 flex items-center justify-between text-xs text-slate-500"><span>手动覆盖本次平台总费用</span><input type="checkbox" checked={manualFeeEnabled} onChange={(event) => setManualFeeEnabled(event.target.checked)} disabled={submitted} className="h-4 w-4 accent-teal-500" /></label>
                 {manualFeeEnabled && <input type="number" min="0" step="0.01" value={manualFee} onChange={(event) => setManualFee(event.target.value)} disabled={submitted} placeholder="本次费用总额" className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-dewu-500" />}
+
+                <button
+                  type="button"
+                  onClick={() => { setTargetPricingOpen((current) => !current); setTargetPricingRequested(false); }}
+                  disabled={submitted}
+                  className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 py-2 text-xs font-semibold text-teal-700 disabled:opacity-50"
+                >
+                  <Calculator size={14} />反算售价
+                </button>
+
+                {targetPricingOpen && (
+                  <div className="mt-3 border-t border-slate-200 pt-3">
+                    <div className="grid grid-cols-3 gap-1 rounded-lg bg-slate-100 p-1">
+                      {([
+                        ['netProceeds', '目标到手'],
+                        ['netProfit', '目标净赚'],
+                        ['netMargin', '目标净利率'],
+                      ] as Array<[TargetPricingKind, string]>).map(([kind, label]) => (
+                        <button
+                          key={kind}
+                          type="button"
+                          onClick={() => { setTargetPricingKind(kind); setTargetPricingRequested(false); }}
+                          className={`min-w-0 rounded-md px-1 py-1.5 text-[11px] font-medium ${targetPricingKind === kind ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <div className="relative min-w-0 flex-1">
+                        <span className="absolute left-3 top-2 text-xs text-slate-400">{targetPricingKind === 'netMargin' ? '%' : '¥'}</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max={targetPricingKind === 'netMargin' ? 100 : undefined}
+                          step="0.01"
+                          value={targetPricingValue}
+                          onChange={(event) => { setTargetPricingValue(event.target.value); setTargetPricingRequested(false); }}
+                          placeholder={targetPricingKind === 'netMargin' ? '例如 20' : '例如 500'}
+                          className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-7 pr-2 text-sm outline-none focus:border-dewu-500"
+                        />
+                      </div>
+                      <button type="button" onClick={() => setTargetPricingRequested(true)} className="rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white">计算</button>
+                    </div>
+
+                    {targetPricingRequested && targetPricing.error && (
+                      <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-2 text-[11px] leading-4 text-amber-700">{targetPricing.error}</p>
+                    )}
+                    {targetPricing.result && (
+                      <div className="mt-2 rounded-lg border border-teal-100 bg-teal-50/70 p-2.5">
+                        <div className="flex items-end justify-between">
+                          <div>
+                            <p className="text-[10px] text-slate-500">最低单件售价</p>
+                            <p className="text-xl font-bold text-teal-700">¥{targetPricing.result.unitSalePrice.toFixed(2)}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => { setSellingPrice(targetPricing.result!.unitSalePrice.toFixed(2)); setValidationError(''); }}
+                            className="rounded-lg bg-teal-600 px-3 py-2 text-[11px] font-semibold text-white"
+                          >
+                            使用这个售价
+                          </button>
+                        </div>
+                        <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 border-t border-teal-100 pt-2 text-[10px]">
+                          <span className="text-slate-500">成交额</span><span className="text-right font-medium">¥{targetPricing.result.quote.grossAmount.toFixed(2)}</span>
+                          <span className="text-slate-500">预计费用</span><span className="text-right font-medium">¥{targetPricing.result.quote.totalFee!.toFixed(2)}</span>
+                          <span className="text-slate-500">预计到手</span><span className="text-right font-medium">¥{targetPricing.result.quote.netProceeds!.toFixed(2)}</span>
+                          <span className="text-slate-500">预计净利润</span><span className="text-right font-medium">¥{targetPricing.result.quote.netProfit!.toFixed(2)}</span>
+                          <span className="text-slate-500">净利率</span><span className="text-right font-medium">{targetPricing.result.quote.netMarginRate == null ? '—（成交额为 0）' : `${targetPricing.result.quote.netMarginRate.toFixed(1)}%`}</span>
+                        </div>
+                        <p className="mt-2 text-[10px] leading-4 text-slate-500">成本 ¥{selectedProduct.price.toFixed(2)} × {quantity}；{manualFeeEnabled ? '本次按手动总费用估算' : `费用方案：${selectedScheme?.name || '未选择'}`}。修改数量或费用后结果会按当前输入重新计算。</p>
+                        {selectedScheme && <p className="text-[10px] leading-4 text-slate-400">方案生效：{new Date(selectedScheme.effectiveFrom).toLocaleString('zh-CN')}</p>}
+                        {selectedProduct.price === 0 && <p className="mt-1 font-semibold text-red-600 text-[10px]">当前成本为 0，请先确认成本记录是否准确。</p>}
+                      </div>
+                    )}
+                    <p className="mt-2 text-[10px] leading-4 text-slate-400">反算结果仅用于估算，不会自动出库；实际费用以平台结算明细为准。</p>
+                  </div>
+                )}
               </div>
             </div>
 

@@ -218,7 +218,7 @@ const loadAllRows = async (
 };
 
 const loadAuthoritativeContext = async (db: any, userId: string, message = "") => {
-  const [products, warehouses, activities] = await Promise.all([
+  const [products, warehouses, activities, feeSchemes] = await Promise.all([
     loadAllRows(
       db,
       "products",
@@ -240,6 +240,13 @@ const loadAuthoritativeContext = async (db: any, userId: string, message = "") =
       userId,
       (query) => query.order("created_at", { ascending: false }),
     ),
+    loadAllRows(
+      db,
+      "fee_schemes",
+      "id,name,sale_mode,category,percent_rate,percent_min,percent_max,percentage_unit,fixed_fee,fixed_fee_unit,shipping_fee,shipping_fee_unit,other_fee,other_fee_unit,effective_from,is_default,updated_at",
+      userId,
+      (query) => query.lte("effective_from", new Date().toISOString()).order("is_default", { ascending: false }).order("effective_from", { ascending: false }),
+    ),
   ]);
 
   const normalizedMessage = message.toUpperCase();
@@ -251,6 +258,7 @@ const loadAuthoritativeContext = async (db: any, userId: string, message = "") =
   return {
     products,
     warehouses,
+    feeSchemes,
     relevantProducts,
     summary: buildAiInventorySummary(products, activities),
   };
