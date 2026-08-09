@@ -7,6 +7,7 @@ import { ProductList } from './components/ProductList';
 import { Stats } from './components/Stats';
 import { Profile } from './components/Profile';
 import { RecycleBinModal } from './components/RecycleBinModal';
+import { TransferProductModal } from './components/TransferProductModal';
 import { AddProductModal } from './components/AddProductModal';
 import { OutboundModal } from './components/OutboundModal';
 import { PendingOrdersModal } from './components/PendingOrdersModal';
@@ -183,6 +184,8 @@ export default function App() {
   const [showPendingModal, setShowPendingModal] = useState(false);
   const [showWidgetModal, setShowWidgetModal] = useState(false);
   const [showRecycleBin, setShowRecycleBin] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferProductTarget, setTransferProductTarget] = useState<Product | null>(null);
   
   // Warehouse State
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -686,6 +689,10 @@ export default function App() {
               setShowAddModal(true);
             }}
             onEditProduct={handleEditClick}
+            onTransferProduct={(product) => {
+              setTransferProductTarget(product);
+              setShowTransferModal(true);
+            }}
             onDeleteProduct={handleDeleteProduct}
             onBatchDeleteProducts={handleBatchDeleteProducts}
             warehouses={warehouses}
@@ -788,6 +795,19 @@ export default function App() {
               onClose={() => setShowRecycleBin(false)}
               userId={session.user.id}
               onRestored={() => {
+                fetchData();
+                setRefreshTrigger((value) => value + 1);
+              }}
+            />
+            <TransferProductModal
+              isOpen={showTransferModal}
+              product={transferProductTarget}
+              warehouses={warehouses}
+              userId={session.user.id}
+              onClose={() => setShowTransferModal(false)}
+              onTransferred={() => {
+                setShowTransferModal(false);
+                setTransferProductTarget(null);
                 fetchData();
                 setRefreshTrigger((value) => value + 1);
               }}

@@ -28,7 +28,7 @@ export interface Product {
 
 export interface Activity {
   id: string;
-  type: 'inbound' | 'outbound' | 'pending' | 'restore';
+  type: 'inbound' | 'outbound' | 'pending' | 'restore' | 'transfer';
   productName: string;
   time: string;
   sku: string;
