@@ -59,3 +59,12 @@ test('deterministic fallback explains missing-cost profit coverage', () => {
   assert.match(answer, /毛利润 ¥200/);
   assert.match(answer, /1 件出库缺少成本，未计入毛利润/);
 });
+
+test('AI summary excludes explicit nonpositive activity counts while preserving missing legacy count', () => {
+  const summary = buildAiInventorySummary([], [
+    { type: 'inbound', count: 0, created_at: '2026-08-08T10:00:00+08:00' },
+    { type: 'inbound', count: -2, created_at: '2026-08-08T10:00:00+08:00' },
+    { type: 'inbound', created_at: '2026-08-08T10:00:00+08:00' },
+  ], new Date('2026-08-08T12:00:00+08:00'));
+  assert.equal(summary.monthInbound, 1);
+});

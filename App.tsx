@@ -8,6 +8,7 @@ import { Stats } from './components/Stats';
 import { Profile } from './components/Profile';
 import { RecycleBinModal } from './components/RecycleBinModal';
 import { TransferProductModal } from './components/TransferProductModal';
+import { DataHealthModal } from './components/DataHealthModal';
 import { AddProductModal } from './components/AddProductModal';
 import { OutboundModal } from './components/OutboundModal';
 import { PendingOrdersModal } from './components/PendingOrdersModal';
@@ -182,6 +183,7 @@ export default function App() {
   const [showPendingModal, setShowPendingModal] = useState(false);
   const [showWidgetModal, setShowWidgetModal] = useState(false);
   const [showRecycleBin, setShowRecycleBin] = useState(false);
+  const [showDataHealth, setShowDataHealth] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transferProductTarget, setTransferProductTarget] = useState<Product | null>(null);
   
@@ -352,6 +354,9 @@ export default function App() {
     try {
       if (Array.isArray(productInput)) {
         if (!session?.user?.id || productInput.length === 0) return;
+        if (productInput.some((product) => Number(product.stock) < 0)) {
+          throw new Error('负库存异常不能通过普通入库修改，请先到“我的 - 数据体检”核对修正');
+        }
         const normalizedProducts = productInput.map(normalizeProduct);
         const uploadedImageUrl = await uploadProductImage(session.user.id, normalizedProducts[0]);
         const productsToSave = normalizedProducts.map((product) => ({
@@ -371,7 +376,22 @@ export default function App() {
       }
 
       const product = productInput;
+      if (Number(product.stock) < 0 || Number(editingProduct?.stock) < 0) {
+        setShowAddModal(false);
+        setEditingProduct(null);
+        setShowDataHealth(true);
+        throw new Error('该记录存在负库存异常，只能通过数据体检修正');
+      }
       const normalizedProduct = normalizeProduct(product);
+      const anomalousVariant = products.find(
+        p => Number(p.stock) < 0 && sameInventoryVariant(p, normalizedProduct)
+      );
+      if (anomalousVariant) {
+        setShowAddModal(false);
+        setEditingProduct(null);
+        setShowDataHealth(true);
+        throw new Error('同仓库、货号和尺码存在负库存异常，请先完成数据体检后再入库');
+      }
       // Check for existing product with same SKU and Size (Unique constraint logic)
       const existingProduct = products.find(
         p => sameInventoryVariant(p, normalizedProduct) && p.id !== normalizedProduct.id
@@ -459,6 +479,13 @@ export default function App() {
   };
 
   const handleEditClick = (product: Product) => {
+    if (Number(product.stock) < 0) {
+      setEditingProduct(null);
+      setShowAddModal(false);
+      setShowDataHealth(true);
+      alert('该记录存在负库存异常，已为你打开数据体检。普通编辑不会修改异常数量。');
+      return;
+    }
     setEditingProduct(product);
     setShowAddModal(true);
   };
@@ -728,6 +755,8 @@ export default function App() {
             onWidgetClick={() => setShowWidgetModal(true)}
             onRecycleBinClick={() => setShowRecycleBin(true)}
             onExportClick={handleExportProducts}
+            onDataHealthClick={() => setShowDataHealth(true)}
+            dataIssueCount={inventoryAnalytics.dataQuality.negativeStockCount + inventoryAnalytics.dataQuality.invalidActivityCount}
             appVersion={__APP_VERSION__}
           />
         );
@@ -800,6 +829,15 @@ export default function App() {
               onClose={() => setShowRecycleBin(false)}
               userId={session.user.id}
               onRestored={() => {
+                fetchData();
+                setRefreshTrigger((value) => value + 1);
+              }}
+            />
+            <DataHealthModal
+              isOpen={showDataHealth}
+              userId={session.user.id}
+              onClose={() => setShowDataHealth(false)}
+              onRepaired={() => {
                 fetchData();
                 setRefreshTrigger((value) => value + 1);
               }}

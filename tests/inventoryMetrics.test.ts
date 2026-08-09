@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildInventoryAnalytics } from '../lib/inventoryMetrics.ts';
+import { buildInventoryAnalytics, getActivityQuantity, hasInvalidActivityQuantity } from '../lib/inventoryMetrics.ts';
+import type { Product } from '../types.ts';
 import type { Activity } from '../types.ts';
 
 const activity = (overrides: Partial<Activity>): Activity => ({
@@ -39,4 +40,27 @@ test('rolling 30 day trend excludes an activity from the same month and day in a
 
   const today = analytics.charts.salesTrend.find((point) => point.name === '8/8');
   assert.equal(today?.value, 100);
+});
+
+test('missing legacy activity count defaults to one but explicit nonpositive counts are excluded', () => {
+  assert.equal(getActivityQuantity(activity({ count: undefined })), 1);
+  assert.equal(getActivityQuantity(activity({ count: 0 })), 0);
+  assert.equal(getActivityQuantity(activity({ count: -2 })), 0);
+  assert.equal(hasInvalidActivityQuantity(activity({ count: 0 })), true);
+  assert.equal(hasInvalidActivityQuantity(activity({ count: undefined })), false);
+});
+
+test('negative stock and invalid activities are excluded and counted as data quality issues', () => {
+  const invalidProduct = {
+    id: 'invalid', name: 'Invalid', brand: 'Nike', size: '42', sku: 'BAD1', price: 100,
+    stock: -5, imageUrl: '', status: 'instock',
+  } satisfies Product;
+  const analytics = buildInventoryAnalytics([invalidProduct], [
+    activity({ type: 'inbound', count: -5 }),
+  ], new Date('2026-08-08T12:00:00+08:00'));
+
+  assert.equal(analytics.dashboard.totalStock, 0);
+  assert.equal(analytics.dashboard.totalInventoryValue, 0);
+  assert.equal(analytics.lifetime.totalInboundCount, 0);
+  assert.deepEqual(analytics.dataQuality, { negativeStockCount: 1, invalidActivityCount: 1 });
 });

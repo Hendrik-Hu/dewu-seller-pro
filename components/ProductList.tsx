@@ -282,7 +282,8 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
             .select('price, stock, warehouse')
             .eq('user_id', userId)
             .is('deleted_at', null)
-            .eq('status', 'instock');
+            .eq('status', 'instock')
+            .gte('stock', 0);
         
         if (data) {
             const totals = data.reduce((acc, curr) => {
@@ -344,7 +345,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
       }>;
     }>();
 
-    products.forEach((product) => {
+    products.filter((product) => Number(product.stock) >= 0).forEach((product) => {
       const normalizedSku = normalizeSku(product.sku);
       const groupKey = normalizedSku || `${product.brand}__${product.name}`;
       const sizeKey = normalizeSize(product.size);

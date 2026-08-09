@@ -44,6 +44,11 @@ export const normalizeStock = (value: unknown): number => {
   return Number.isFinite(stock) && stock >= 0 ? Math.floor(stock) : 0;
 };
 
+export const parseStoredStock = (value: unknown): number => {
+  const stock = Number(value);
+  return Number.isFinite(stock) ? Math.floor(stock) : 0;
+};
+
 export const normalizeProduct = (product: Product): Product => ({
   ...product,
   name: String(product.name ?? '').trim() || normalizeSku(product.sku),

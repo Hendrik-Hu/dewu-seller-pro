@@ -11,9 +11,15 @@ const getActivityDate = (activity: Activity) => {
 };
 
 export const getActivityQuantity = (activity: Activity) => {
+  if (activity.count === undefined || activity.count === null) return 1;
   const quantity = Number(activity.count);
-  return Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+  return Number.isFinite(quantity) && quantity > 0 ? quantity : 0;
 };
+
+export const hasInvalidActivityQuantity = (activity: Activity) =>
+  activity.count !== undefined &&
+  activity.count !== null &&
+  (!Number.isFinite(Number(activity.count)) || Number(activity.count) <= 0);
 
 export const getActivityGrossAmount = (activity: Activity) =>
   (Number(activity.price) || 0) * getActivityQuantity(activity);
@@ -39,7 +45,7 @@ const getLocalDateKey = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
 const getInStockProducts = (products: Product[]) =>
-  products.filter((product) => product.status === 'instock');
+  products.filter((product) => product.status === 'instock' && Number(product.stock) >= 0);
 
 export const getPendingProducts = (products: Product[]) =>
   products.filter((product) => product.status === 'shipping');
@@ -136,6 +142,10 @@ export const buildInventoryAnalytics = (
   });
 
   return {
+    dataQuality: {
+      negativeStockCount: products.filter((product) => Number(product.stock) < 0).length,
+      invalidActivityCount: activities.filter(hasInvalidActivityQuantity).length,
+    },
     dashboard: {
       pendingOrderCount: pendingProducts.length,
       todaySalesAmount,

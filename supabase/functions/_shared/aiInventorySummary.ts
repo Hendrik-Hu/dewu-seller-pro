@@ -19,8 +19,9 @@ const numberOr = (value: unknown, fallback = 0) => {
 };
 
 const quantityOf = (activity: SummaryActivity) => {
+  if (activity.count === undefined || activity.count === null || activity.count === '') return 1;
   const quantity = Number(activity.count);
-  return Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+  return Number.isFinite(quantity) && quantity > 0 ? quantity : 0;
 };
 
 const hasRecordedCost = (activity: SummaryActivity) =>

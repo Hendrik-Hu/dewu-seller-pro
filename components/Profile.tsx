@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { ArchiveRestore, ChevronRight, LogOut, Edit2, Check, X, Camera, Moon, LayoutGrid, ToggleLeft, ToggleRight, Shield, Download, UserRound } from 'lucide-react';
+import { ArchiveRestore, ChevronRight, LogOut, Edit2, Check, X, Camera, Moon, LayoutGrid, ToggleLeft, ToggleRight, Shield, Download, UserRound, ShieldAlert } from 'lucide-react';
 
 import { AccountSecurityModal } from './AccountSecurityModal';
 
@@ -25,6 +25,8 @@ interface ProfileProps {
   onWidgetClick: () => void;
   onRecycleBinClick: () => void;
   onExportClick: () => void;
+  onDataHealthClick: () => void;
+  dataIssueCount: number;
   appVersion: string;
 }
 
@@ -43,6 +45,8 @@ export const Profile: React.FC<ProfileProps> = ({
   onWidgetClick,
   onRecycleBinClick,
   onExportClick,
+  onDataHealthClick,
+  dataIssueCount,
   appVersion,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -56,6 +60,12 @@ export const Profile: React.FC<ProfileProps> = ({
 
   const menuGroups: MenuItem[][] = [
     [
+      {
+        icon: ShieldAlert,
+        label: '数据体检',
+        value: dataIssueCount > 0 ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-600 dark:bg-amber-950/30 dark:text-amber-300">{dataIssueCount} 条待核对</span> : '正常',
+        action: onDataHealthClick,
+      },
       { icon: ArchiveRestore, label: '回收站', action: onRecycleBinClick },
       { icon: Download, label: '导出库存快照', action: onExportClick },
     ],

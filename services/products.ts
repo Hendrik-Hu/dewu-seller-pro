@@ -34,7 +34,8 @@ export const listProducts = async ({
     .from('products')
     .select('*', { count: 'exact' })
     .eq('user_id', userId)
-    .is('deleted_at', null);
+    .is('deleted_at', null)
+    .gte('stock', 0);
 
   if (warehouse) {
     query = query.eq('warehouse', warehouse);
@@ -91,7 +92,8 @@ export const getWarehouseProductSummary = async (userId: string, warehouse: stri
     .eq('user_id', userId)
     .eq('warehouse', warehouse)
     .is('deleted_at', null)
-    .eq('status', 'instock');
+    .eq('status', 'instock')
+    .gte('stock', 0);
 
   if (error) throw error;
 
@@ -201,6 +203,7 @@ export const batchInboundProducts = async (products: Product[], userId: string):
   const { data, error } = await supabase.rpc('batch_inbound_products', {
     p_batch_id: `manual-${products[0]?.id || Date.now()}`,
     p_rows: rows,
+    p_platform: '手动批量入库',
     p_user_id: userId,
   });
 

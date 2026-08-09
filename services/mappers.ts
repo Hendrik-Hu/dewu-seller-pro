@@ -7,6 +7,7 @@ import {
   normalizeSku,
   normalizeStock,
   normalizeStoredCost,
+  parseStoredStock,
 } from '../lib/productNormalization';
 import { isProductImageRef } from './storageImages';
 
@@ -17,7 +18,7 @@ export const mapProductFromDb = (row: any): Product => ({
   size: normalizeSize(row.size),
   sku: normalizeSku(row.sku),
   price: normalizeStoredCost(row.price),
-  stock: normalizeStock(row.stock),
+  stock: parseStoredStock(row.stock),
   imageUrl: row.image_url || row.imageUrl || '',
   imageStorageRef: isProductImageRef(row.image_url || row.imageUrl) ? (row.image_url || row.imageUrl) : undefined,
   status: row.status || 'instock',
@@ -62,7 +63,7 @@ export const mapActivityFromDb = (row: any): Activity => ({
   createdAt: row.created_at || row.createdAt,
   created_at: row.created_at,
   warehouse: row.warehouse,
-  count: row.count ? Number(row.count) : 1,
+  count: row.count === undefined || row.count === null || row.count === '' ? undefined : Number(row.count),
   source: row.source || '',
 });
 
