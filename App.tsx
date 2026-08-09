@@ -414,7 +414,7 @@ export default function App() {
 
       finalProduct = {
         ...finalProduct,
-        imageUrl: uploadedImageUrl || finalProduct.imageUrl || `https://picsum.photos/200/200?random=${Date.now()}`,
+        imageUrl: uploadedImageUrl || finalProduct.imageUrl || '',
         imageStorageRef: isProductImageRef(uploadedImageUrl) ? uploadedImageUrl : finalProduct.imageStorageRef,
         source: normalizedProduct.source || finalProduct.source || '',
         imageDataUrl: '',
@@ -673,7 +673,6 @@ export default function App() {
             todaySalesCount={inventoryAnalytics.dashboard.todaySalesCount}
             onAvatarClick={() => setCurrentTab(Tab.ME)}
             products={products}
-            warehouses={warehouses}
             onAIManageExecuted={() => {
               fetchData();
               setRefreshTrigger(prev => prev + 1);
@@ -703,7 +702,16 @@ export default function App() {
           />
         );
       case Tab.STATS:
-        return <Stats products={products} activities={activities} />;
+        return (
+          <Stats
+            products={products}
+            activities={activities}
+            onAIExecuted={() => {
+              fetchData();
+              setRefreshTrigger(prev => prev + 1);
+            }}
+          />
+        );
       case Tab.ME:
         // Calculate Stats for Profile
         return (
@@ -738,7 +746,6 @@ export default function App() {
             todaySalesCount={inventoryAnalytics.dashboard.todaySalesCount}
             onAvatarClick={() => setCurrentTab(Tab.ME)}
             products={products}
-            warehouses={warehouses}
             onAIManageExecuted={() => {
               fetchData();
               setRefreshTrigger(prev => prev + 1);

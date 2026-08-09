@@ -1,13 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Bot, CheckCircle2, Loader2, Send, ShieldAlert, X, AlertCircle } from 'lucide-react';
-import { Product, Warehouse } from '../types';
 import { supabase } from '../lib/supabase';
 
 interface AIManagementModalProps {
   isOpen: boolean;
   onClose: () => void;
-  products: Product[];
-  warehouses?: Warehouse[];
   onExecuted?: () => void;
 }
 
@@ -25,7 +22,7 @@ interface PlannedAction {
 
 interface ActionSummary {
   type: string;
-  status: 'success' | 'failed' | 'planned';
+  status: 'success' | 'failed' | 'planned' | 'answered';
   summary: string;
 }
 
@@ -59,19 +56,18 @@ const statusBadgeClass: Record<ActionSummary['status'], string> = {
   planned: 'bg-slate-100 text-slate-600',
   success: 'bg-emerald-50 text-emerald-600',
   failed: 'bg-red-50 text-red-500',
+  answered: 'bg-cyan-50 text-cyan-600',
 };
 
 export const AIManagementModal: React.FC<AIManagementModalProps> = ({
   isOpen,
   onClose,
-  products,
-  warehouses = [],
   onExecuted,
 }) => {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: '你好！我是 AI 管理助手。你可以直接描述库存动作，我会先生成执行计划，确认后再由后端真正写入库存和流水。',
+      content: '你好！我是 AI 助手。你可以让我分析库存和销售，也可以描述入库或出库动作。执行类请求会先生成计划，经过你确认后才写入库存和流水。',
     },
   ]);
   const [input, setInput] = useState('');
@@ -82,26 +78,6 @@ export const AIManagementModal: React.FC<AIManagementModalProps> = ({
   useEffect(() => {
     if (isOpen) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [isOpen, messages, isLoading, pendingPlan]);
-
-  const buildContext = useMemo(() => ({
-    products: products.slice(0, 200).map((item) => ({
-      id: item.id,
-      sku: item.sku,
-      name: item.name,
-      brand: item.brand,
-      size: item.size,
-      stock: item.stock,
-      warehouse: item.warehouse || '',
-      location: item.location || '',
-      cost: item.price,
-      source: item.source || '',
-    })),
-    warehouses: warehouses.map((warehouse) => ({
-      id: warehouse.id,
-      name: warehouse.name,
-      is_default: Boolean(warehouse.is_default),
-    })),
-  }), [products, warehouses]);
 
   const pushAssistantMessage = (content: string, actions?: ActionSummary[]) => {
     setMessages((prev) => [...prev, { role: 'assistant', content, actions }]);
@@ -120,7 +96,6 @@ export const AIManagementModal: React.FC<AIManagementModalProps> = ({
         body: {
           message: userMessage,
           confirm: false,
-          context: buildContext,
           history: messages.slice(-8).map((item) => ({ role: item.role, content: item.content })),
         },
       });
@@ -159,7 +134,6 @@ export const AIManagementModal: React.FC<AIManagementModalProps> = ({
         body: {
           message: pendingPlan.sourceMessage,
           confirm: true,
-          context: buildContext,
           plannedActions: pendingPlan.plannedActions,
           planToken: pendingPlan.planToken,
         },
@@ -192,7 +166,7 @@ export const AIManagementModal: React.FC<AIManagementModalProps> = ({
               <Bot size={20} className="text-cyan-600 dark:text-cyan-400" />
             </div>
             <div>
-              <h2 className="font-bold text-slate-900 dark:text-white">AI 管理</h2>
+              <h2 className="font-bold text-slate-900 dark:text-white">AI 助手</h2>
               <p className="text-xs text-slate-500 dark:text-zinc-400">计划、确认、执行全程可见</p>
             </div>
           </div>
@@ -203,7 +177,7 @@ export const AIManagementModal: React.FC<AIManagementModalProps> = ({
 
         <div className="mx-4 mt-3 mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300 flex items-start space-x-2">
           <ShieldAlert size={14} className="mt-0.5 shrink-0" />
-          <span>执行类指令至少要包含品牌、货号、尺码。数量默认 1，仓库默认主仓库，成本默认 0。真正执行由 Supabase 后端完成，且必须经过你的确认。</span>
+          <span>执行类指令至少要包含操作类型、品牌、货号和尺码。数量默认 1，仓库默认主仓库，入库成本默认 0；出库售价必须明确填写。真正执行由 Supabase 后端完成，且必须经过你的确认。</span>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-black/50">
@@ -226,14 +200,14 @@ export const AIManagementModal: React.FC<AIManagementModalProps> = ({
                             {action.status === 'failed' ? (
                               <AlertCircle size={14} className="text-red-500" />
                             ) : (
-                              <CheckCircle2 size={14} className={action.status === 'success' ? 'text-emerald-500' : 'text-slate-400'} />
+                              <CheckCircle2 size={14} className={action.status === 'success' ? 'text-emerald-500' : action.status === 'answered' ? 'text-cyan-500' : 'text-slate-400'} />
                             )}
                             <span className="text-[11px] font-semibold text-slate-700 dark:text-zinc-200">
                               {actionTypeLabel[action.type] || action.type}
                             </span>
                           </div>
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${statusBadgeClass[action.status]}`}>
-                            {action.status === 'planned' ? '待确认' : action.status === 'success' ? '已执行' : '失败'}
+                            {action.status === 'planned' ? '待确认' : action.status === 'success' ? '已执行' : action.status === 'answered' ? '已回答' : '失败'}
                           </span>
                         </div>
                         <div className="mt-1 text-[11px] text-slate-500 dark:text-zinc-400">{action.summary}</div>

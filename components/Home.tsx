@@ -1,8 +1,7 @@
 import React from 'react';
-import { ShoppingBag, Truck, Package, ArrowDownRight, ArrowUpRight, AlertCircle, ChevronRight, Clock, Sparkles, Bot } from 'lucide-react';
-import { Activity, Product, Warehouse } from '../types';
+import { ShoppingBag, Truck, Package, ArrowDownRight, ArrowUpRight, ChevronRight, Clock, Sparkles } from 'lucide-react';
+import { Activity, Product } from '../types';
 import { InventoryStatsModal } from './InventoryStatsModal';
-import { AIAssistantModal } from './AIAssistantModal';
 import { AIManagementModal } from './AIManagementModal';
 import { getActivityGrossAmount, getActivityQuantity } from '../lib/inventoryMetrics';
 import { formatProductSize } from '../lib/productNormalization';
@@ -21,7 +20,6 @@ interface HomeProps {
   todaySalesAmount: number;
   todaySalesCount: number;
   products: Product[];
-  warehouses?: Warehouse[];
   onAIManageExecuted?: () => void;
 }
 
@@ -38,14 +36,11 @@ export const Home: React.FC<HomeProps> = ({
   todaySalesAmount,
   todaySalesCount,
   products,
-  warehouses = [],
   onAIManageExecuted
 }) => {
   // Inventory Modal State
   const [showInventoryModal, setShowInventoryModal] = React.useState(false);
-  // AI Assistant Modal State
   const [showAIModal, setShowAIModal] = React.useState(false);
-  const [showAIManageModal, setShowAIManageModal] = React.useState(false);
 
   const formatTime = (dateString?: string) => {
     if (!dateString) return '';
@@ -152,24 +147,9 @@ export const Home: React.FC<HomeProps> = ({
               <Sparkles size={20} className="text-indigo-500 relative z-10" />
               <div className="absolute inset-0 bg-indigo-100 dark:bg-indigo-900/40 opacity-0 group-hover:opacity-100 transition-opacity"></div>
             </div>
-            <span className="text-xs font-medium text-slate-600 dark:text-zinc-300">AI 分析</span>
+            <span className="text-xs font-medium text-slate-600 dark:text-zinc-300">AI 助手</span>
           </button>
         </div>
-        <button
-          onClick={() => setShowAIManageModal(true)}
-          className="mt-3 w-full bg-white dark:bg-zinc-900 rounded-2xl p-4 border border-cyan-100 dark:border-cyan-900/30 shadow-sm flex items-center justify-between active:scale-[0.99] transition-transform"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="bg-cyan-50 dark:bg-cyan-900/30 p-2 rounded-xl">
-              <Bot size={18} className="text-cyan-600 dark:text-cyan-400" />
-            </div>
-            <div className="text-left">
-              <div className="text-sm font-semibold text-slate-900 dark:text-white">AI 管理</div>
-              <div className="text-xs text-slate-500 dark:text-zinc-400">用自然语言生成库存操作计划</div>
-            </div>
-          </div>
-          <ChevronRight size={16} className="text-slate-300 dark:text-zinc-600" />
-        </button>
       </div>
 
       {/* Inventory Stats Modal */}
@@ -179,18 +159,9 @@ export const Home: React.FC<HomeProps> = ({
         products={products}
       />
 
-      {/* AI Assistant Modal */}
-      <AIAssistantModal
+      <AIManagementModal
         isOpen={showAIModal}
         onClose={() => setShowAIModal(false)}
-        products={products}
-        activities={activities}
-      />
-      <AIManagementModal
-        isOpen={showAIManageModal}
-        onClose={() => setShowAIManageModal(false)}
-        products={products}
-        warehouses={warehouses}
         onExecuted={onAIManageExecuted}
       />
 
@@ -198,7 +169,6 @@ export const Home: React.FC<HomeProps> = ({
       <div>
         <div className="flex justify-between items-center px-1 mb-3">
           <h3 className="text-sm font-bold text-slate-900 dark:text-white">最近动态 (近10条)</h3>
-          <button className="text-xs text-dewu-500 font-medium">查看全部</button>
         </div>
         <div className="space-y-3">
           {activities.length === 0 ? (

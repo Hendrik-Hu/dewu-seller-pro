@@ -208,19 +208,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       });
 
       if (error) {
-        console.warn('Backend function not found, falling back to mock logic.', error);
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-
-        if (productData.sku.toUpperCase().includes('DD1391')) {
-          updateProductData({
-            name: 'Nike Dunk Low Black White (Panda)',
-            brand: 'Nike',
-            imageUrl: 'https://images.stockx.com/images/Nike-Dunk-Low-Retro-White-Black-2021-Product.jpg?fit=fill&bg=FFFFFF&w=700&h=500&fm=webp&auto=compress&q=90&dpr=2&trim=color&updated_at=1633027409',
-            price: 749,
-          });
-        } else {
-          alert('未找到该货号信息，请手动输入。');
-        }
+        console.warn('SKU lookup failed.', error);
+        alert('货号查询暂时不可用，请手动输入商品信息。');
       } else if (data && data.found) {
         updateProductData({
           name: data.name,

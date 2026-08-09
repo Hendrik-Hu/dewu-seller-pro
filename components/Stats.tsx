@@ -13,17 +13,18 @@ import {
 } from 'recharts';
 import { Bot, Send, Sparkles } from 'lucide-react';
 import { Activity, Product } from '../types';
-import { AIAssistantModal } from './AIAssistantModal';
+import { AIManagementModal } from './AIManagementModal';
 import { buildInventoryAnalytics } from '../lib/inventoryMetrics';
 
 interface StatsProps {
   products: Product[];
   activities: Activity[];
+  onAIExecuted?: () => void;
 }
 
 const COLORS = ['#14b8a6', '#0f766e', '#0d9488', '#ccfbf7'];
 
-export const Stats: React.FC<StatsProps> = ({ products, activities }) => {
+export const Stats: React.FC<StatsProps> = ({ products, activities, onAIExecuted }) => {
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const analytics = buildInventoryAnalytics(products, activities);
   const monthly = analytics.monthly;
@@ -82,10 +83,10 @@ export const Stats: React.FC<StatsProps> = ({ products, activities }) => {
         onClick={() => setIsAIModalOpen(true)}
         className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm mb-6 overflow-hidden flex flex-col cursor-pointer hover:shadow-md transition-shadow group"
       >
-        <div className="bg-gradient-to-r from-indigo-600 to-violet-600 p-3 flex items-center justify-between">
+        <div className="bg-cyan-600 p-3 flex items-center justify-between">
           <div className="flex items-center space-x-2 text-white">
             <Bot size={18} />
-            <span className="text-sm font-bold">AI 经营助手</span>
+            <span className="text-sm font-bold">AI 助手</span>
           </div>
           <span className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded-full group-hover:bg-white/30 transition-colors">点击展开</span>
         </div>
@@ -114,11 +115,10 @@ export const Stats: React.FC<StatsProps> = ({ products, activities }) => {
         </div>
       </div>
 
-      <AIAssistantModal
+      <AIManagementModal
         isOpen={isAIModalOpen}
         onClose={() => setIsAIModalOpen(false)}
-        products={products}
-        activities={activities}
+        onExecuted={onAIExecuted}
       />
 
       <div className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm mb-6">

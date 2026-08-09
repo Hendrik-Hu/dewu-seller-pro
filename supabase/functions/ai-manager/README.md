@@ -7,11 +7,12 @@ Frontend flow:
 1. User sends a natural-language inventory command.
 2. The app calls `supabase.functions.invoke('ai-manager')`.
 3. This function authenticates the current Supabase user.
-4. It sends the message and inventory context to Dify when `DIFY_API_KEY` is configured.
-5. It returns a dry-run execution plan with structured actions.
-6. The frontend asks the user to confirm.
-7. The frontend sends the confirmed plan back with a signed `planToken`.
-8. This function verifies the signature, then executes approved `inbound` / `outbound` actions with the service role key.
+4. It reads the current user's active products, warehouses, and activity ledger from Supabase.
+5. It sends a deterministic compact summary and relevant SKU rows to Dify when `DIFY_API_KEY` is configured.
+6. It returns a dry-run execution plan with structured actions.
+7. The frontend asks the user to confirm.
+8. The frontend sends the confirmed plan back with a signed `planToken`.
+9. This function verifies the signature, reloads authoritative data, then executes approved actions through the shared atomic inventory RPCs.
 
 Required Supabase secrets:
 
@@ -21,20 +22,11 @@ supabase secrets set DIFY_BASE_URL="https://api.dify.ai/v1"
 supabase secrets set AI_MANAGER_SIGNING_SECRET="replace-with-a-random-secret"
 ```
 
-Optional Coze fallback secrets:
-
-```bash
-supabase secrets set COZE_AGENT_URL="https://jth5z746wp.coze.site/stream_run"
-supabase secrets set COZE_AGENT_TOKEN="optional-token"
-supabase secrets set COZE_PROJECT_ID="7638280101796446249"
-```
-
 Important:
 
 - Dify is the primary agent provider for this project. The function calls `POST /workflows/run` with `response_mode=blocking`.
 - The Dify workflow should return an object at `outputs.result` matching the JSON shape below.
-- Because Dify input form fields can be length-limited, this function sends a compact serialized inventory summary to `context_json` instead of the full raw product list.
-- If Dify is unavailable, the function can optionally try Coze when `COZE_AGENT_URL` is configured.
+- Because Dify input form fields can be length-limited, this function sends a compact server-generated summary to `context_json` instead of trusting client inventory data.
 - If no external agent is available, the function falls back to a simple local parser so the UI can still handle basic Chinese inventory commands.
 
 Dify `result` should return JSON in this shape:
@@ -64,12 +56,12 @@ Notes:
 - The external AI workflow is responsible for understanding intent and producing `actions`.
 - The external AI workflow should not claim it has already written the database.
 - The database write happens only inside this Edge Function after plan confirmation.
-- If `DIFY_API_KEY` is not set, the function can use Coze or the local fallback parser.
+- If `DIFY_API_KEY` is not set, the function uses the explicitly identified local fallback parser.
 
 Supported actions:
 
 ```json
-{ "type": "inbound", "input": { "sku": "string", "size": "string", "quantity": 1, "cost": 0, "name": "string", "brand": "string", "warehouse": "string", "location": "string", "imageUrl": "string" } }
+{ "type": "inbound", "input": { "sku": "string", "size": "string", "quantity": 1, "cost": 0, "name": "string", "brand": "string", "warehouse": "string", "location": "string", "source": "string", "imageUrl": "string" } }
 { "type": "outbound", "input": { "sku": "string", "size": "string", "quantity": 1, "salePrice": 0, "warehouse": "string" } }
 { "type": "answer", "message": "string" }
 ```
