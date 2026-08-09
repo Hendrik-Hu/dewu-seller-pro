@@ -18,4 +18,3 @@ test('unrelated links and incomplete credentials are rejected', () => {
   assert.equal(parseRecoveryUrl('com.hendrikhu.sellerinventory://other?code=abc'), null);
   assert.equal(parseRecoveryUrl(`${NATIVE_RECOVERY_REDIRECT}#access_token=only`), null);
 });
-

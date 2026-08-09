@@ -25,10 +25,11 @@ foreach ($page in @('privacy.html', 'account-deletion.html')) {
     throw "Public policy page failed verification: $publicSite/$page"
   }
 }
-$assetLinks = Invoke-WebRequest -Uri "$publicSite/.well-known/assetlinks.json" -Method Get -MaximumRedirection 3 -TimeoutSec 20
-if ($assetLinks.StatusCode -ne 200 -or $assetLinks.Content -notmatch 'com.hendrikhu.sellerinventory') {
+$assetLinks = Invoke-WebRequest -Uri "$publicSite/.well-known/assetlinks.json" -Method Get -MaximumRedirection 0 -TimeoutSec 20
+if ($assetLinks.StatusCode -ne 200 -or $assetLinks.Headers.'Content-Type' -notmatch '^application/json(?:;|$)') {
   throw "Android App Link association failed verification."
 }
+$assetLinksJson = $assetLinks.Content | ConvertFrom-Json
 $keystore = [IO.Path]::GetFullPath((Require-Env "SELLER_INVENTORY_KEYSTORE"))
 $workspace = [IO.Path]::GetFullPath($PSScriptRoot).TrimEnd('\') + '\'
 if ($keystore.StartsWith($workspace, [StringComparison]::OrdinalIgnoreCase)) { throw "Release keystore must be stored outside the repository." }
@@ -63,10 +64,13 @@ $apksigner = Get-ChildItem "$env:ANDROID_HOME\build-tools" -Directory | Sort-Obj
 if (-not $apksigner) { throw "Android apksigner was not found." }
 $signature = & $apksigner verify --print-certs $apk 2>&1
 if ($LASTEXITCODE -ne 0 -or ($signature -join "`n") -notmatch 'Signer #1 certificate SHA-256 digest') { throw "Release APK signature verification failed." }
+$certificateDigest = (($signature | Where-Object { $_ -match 'Signer #1 certificate SHA-256 digest' } | Select-Object -First 1) -split ':', 2)[1].Trim().Replace(':', '').ToUpperInvariant()
+$declaredDigests = @($assetLinksJson | Where-Object { $_.target.namespace -eq 'android_app' -and $_.target.package_name -eq 'com.hendrikhu.sellerinventory' } | ForEach-Object { $_.target.sha256_cert_fingerprints } | ForEach-Object { ([string]$_).Replace(':', '').ToUpperInvariant() })
+if ($declaredDigests -notcontains $certificateDigest) { throw "The signed APK certificate is not declared by assetlinks.json." }
 
 Write-Host "4/4 Release verification complete." -ForegroundColor Green
 Write-Host "APK: $apk"
 Write-Host "APK SHA-256: $((Get-FileHash -Algorithm SHA256 $apk).Hash)"
 Write-Host "AAB: $aab"
 Write-Host "AAB SHA-256: $((Get-FileHash -Algorithm SHA256 $aab).Hash)"
-$signature | Where-Object { $_ -match 'Signer #1 certificate SHA-256 digest' } | ForEach-Object { Write-Host $_ }
+Write-Host "APK certificate SHA-256: $certificateDigest"

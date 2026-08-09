@@ -22,4 +22,3 @@ export const parseRecoveryUrl = (rawUrl: string): RecoveryUrlPayload | null => {
     return null;
   }
 };
-

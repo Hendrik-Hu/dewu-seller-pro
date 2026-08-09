@@ -23,7 +23,9 @@ import { buildInventoryAnalytics } from './lib/inventoryMetrics';
 import { Loader2 } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { App as CapacitorApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 import { parseRecoveryUrl } from './lib/authRecovery';
+import { SystemBars } from './lib/systemBars';
 import { formatProductSize, normalizeProduct, sameInventoryVariant } from './lib/productNormalization';
 import { createProductImageRef, isProductImageRef } from './services/storageImages';
 
@@ -42,7 +44,9 @@ export default function App() {
 
   // Theme State
   const [isDarkMode, setIsDarkMode] = useState(() => {
-    return (localStorage.getItem('seller_inventory_theme') || localStorage.getItem('dewu_theme')) === 'dark';
+    const storedTheme = localStorage.getItem('seller_inventory_theme') || localStorage.getItem('dewu_theme');
+    if (storedTheme === 'dark' || storedTheme === 'light') return storedTheme === 'dark';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
 
   // Auth Effect
@@ -101,6 +105,11 @@ export default function App() {
     }
     localStorage.setItem('seller_inventory_theme', isDarkMode ? 'dark' : 'light');
     localStorage.removeItem('dewu_theme');
+
+    if (Capacitor.isNativePlatform()) {
+      void SystemBars.setTheme({ dark: isDarkMode })
+        .catch((error) => console.warn('Unable to synchronize the native system bar theme.', error));
+    }
   }, [isDarkMode]);
 
   // User Profile State
