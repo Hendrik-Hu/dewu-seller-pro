@@ -3,6 +3,7 @@ import { Search, Plus, Boxes, CircleDollarSign, Warehouse as WarehouseIcon, Chev
 import { Product, Warehouse } from '../types';
 import { supabase } from '../lib/supabase';
 import { listProducts } from '../services/products';
+import { formatProductSize, normalizeSize, normalizeSku } from '../lib/productNormalization';
 
 interface ProductListProps {
   userId: string;
@@ -319,9 +320,9 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
     }>();
 
     products.forEach((product) => {
-      const normalizedSku = (product.sku || '').trim().toUpperCase();
+      const normalizedSku = normalizeSku(product.sku);
       const groupKey = normalizedSku || `${product.brand}__${product.name}`;
-      const sizeKey = (product.size || '均码').trim() || '均码';
+      const sizeKey = normalizeSize(product.size);
 
       if (!groups.has(groupKey)) {
         groups.set(groupKey, {
@@ -781,7 +782,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                         >
                           <div className="min-w-0 flex flex-col gap-1">
                             <div className="flex items-center gap-1 flex-wrap">
-                              <span className="bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-200 text-[9px] px-1 py-0.5 rounded font-medium leading-none">{sizeRow.size}码</span>
+                              <span className="bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-200 text-[9px] px-1 py-0.5 rounded font-medium leading-none">{formatProductSize(sizeRow.size)}</span>
                               <span className="text-[9px] px-1 py-0.5 rounded font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 leading-none">库存 {sizeRow.stock}</span>
                             </div>
                             <div className="flex items-end justify-between gap-2">
@@ -923,7 +924,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                       
                       <div className="flex justify-between items-end mt-1">
                         <div className="flex items-center space-x-2">
-                          <span className="bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 text-[10px] px-1 py-0.5 rounded font-medium">{product.size}码</span>
+                          <span className="bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 text-[10px] px-1 py-0.5 rounded font-medium">{formatProductSize(product.size)}</span>
                           <span className={`text-[10px] px-1 py-0.5 rounded font-medium ${
                             product.stock > 10 ? 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20' : 'text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20'
                           }`}>库存 {product.stock}</span>

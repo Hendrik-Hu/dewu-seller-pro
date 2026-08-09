@@ -39,6 +39,21 @@ const toNumber = (value: unknown, fallback = 0) => {
 const toText = (value: unknown, fallback = "") =>
   typeof value === "string" && value.trim() ? value.trim() : fallback;
 
+const normalizeSku = (value: unknown) => toText(value).toUpperCase();
+
+const normalizeSize = (value: unknown, fallback = "") => {
+  const raw = toText(value, fallback).trim();
+  if (!raw) return "";
+  if (/^均(?:码)+$/u.test(raw)) return "均码";
+  const normalized = raw.replace(/(?:\s*码)+$/u, "").trim();
+  return !normalized || normalized === "均码" ? "均码" : normalized;
+};
+
+const formatSize = (value: unknown) => {
+  const size = normalizeSize(value, "均码");
+  return size === "均码" ? size : `${size}码`;
+};
+
 const sortKeys = (value: unknown): unknown => {
   if (Array.isArray(value)) {
     return value.map(sortKeys);
@@ -144,8 +159,8 @@ const serializeCompactContext = (context: any, maxLength = 220) => {
     },
     warehouses: warehouses.slice(0, 3).map((warehouse: any) => clipText(warehouse.name, 16)),
     products: products.slice(0, 4).map((item: any) => ({
-      sku: clipText(item.sku, 16).toUpperCase(),
-      size: clipText(item.size, 8),
+      sku: normalizeSku(clipText(item.sku, 16)),
+      size: normalizeSize(clipText(item.size, 8), "均码"),
       stock: toNumber(item.stock),
       warehouse: clipText(item.warehouse, 12),
     })),
@@ -330,8 +345,8 @@ const isMeaningfulText = (value: unknown) => {
 };
 
 const findMatchingContextProducts = (input: Record<string, unknown>, context: any) => {
-  const sku = toText(input.sku).toUpperCase();
-  const size = toText(input.size);
+  const sku = normalizeSku(input.sku);
+  const size = normalizeSize(input.size);
   const warehouse = toText(input.warehouse);
   const brand = toText(input.brand).toLowerCase();
   const products = Array.isArray(context?.products) ? context.products : [];
@@ -339,8 +354,8 @@ const findMatchingContextProducts = (input: Record<string, unknown>, context: an
   if (!sku) return [];
 
   return products.filter((item: any) => {
-    const skuMatches = toText(item.sku).toUpperCase() === sku;
-    const sizeMatches = !size || toText(item.size) === size;
+    const skuMatches = normalizeSku(item.sku) === sku;
+    const sizeMatches = !size || normalizeSize(item.size, "均码") === size;
     const warehouseMatches = !warehouse || toText(item.warehouse) === warehouse;
     const brandMatches = !brand || toText(item.brand).toLowerCase() === brand;
     return skuMatches && sizeMatches && warehouseMatches && brandMatches;
@@ -353,7 +368,7 @@ const inferBrandFromContext = (input: Record<string, unknown>, context: any) => 
   const exactMatches = findMatchingContextProducts(input, context);
   const candidates = exactMatches.length > 0
     ? exactMatches
-    : (Array.isArray(context?.products) ? context.products : []).filter((item: any) => toText(item.sku).toUpperCase() === toText(input.sku).toUpperCase());
+    : (Array.isArray(context?.products) ? context.products : []).filter((item: any) => normalizeSku(item.sku) === normalizeSku(input.sku));
 
   const brands = Array.from(
     new Set(
@@ -374,8 +389,8 @@ const buildCanonicalActionInput = (
   const matchedProduct = findMatchingContextProducts(input, context)[0];
   const rawQuantity = input.quantity ?? input.count;
   const canonicalInput: Record<string, unknown> = {
-    sku: toText(input.sku).toUpperCase(),
-    size: toText(input.size),
+    sku: normalizeSku(input.sku),
+    size: normalizeSize(input.size),
     quantity: rawQuantity === undefined || rawQuantity === null || rawQuantity === ""
       ? 1
       : toNumber(rawQuantity, 0),
@@ -446,6 +461,21 @@ const buildQuantityValidationFailure = (action: AgentAction): ActionResult | nul
   };
 };
 
+const buildMoneyValidationFailure = (action: AgentAction): ActionResult | null => {
+  if (action.type === "answer") return null;
+  const field = action.type === "inbound" ? "cost" : "salePrice";
+  const amount = toNumber(action.input?.[field], Number.NaN);
+  if (Number.isFinite(amount) && amount >= 0) return null;
+
+  return {
+    type: action.type,
+    status: "failed",
+    summary: action.type === "inbound"
+      ? "计划失败：成本必须是大于或等于 0 的有效数字，未填写时默认 0。"
+      : "计划失败：售价必须是大于或等于 0 的有效数字。",
+  };
+};
+
 const sanitizeAction = (action: unknown): AgentAction | null => {
   if (!action || typeof action !== "object") return null;
 
@@ -462,8 +492,8 @@ const sanitizeAction = (action: unknown): AgentAction | null => {
 
   const input = raw.input && typeof raw.input === "object" ? raw.input as Record<string, unknown> : {};
   const normalizedInput: Record<string, unknown> = {
-    sku: toText(input.sku).toUpperCase(),
-    size: toText(input.size),
+    sku: normalizeSku(input.sku),
+    size: normalizeSize(input.size),
     quantity: input.quantity === undefined && input.count === undefined
       ? 1
       : toNumber(input.quantity ?? input.count, 0),
@@ -569,11 +599,13 @@ const previewInbound = (input: Record<string, unknown>, context: any): ActionRes
   if (missingFields.length > 0) return buildValidationFailure(action, missingFields);
   const quantityFailure = buildQuantityValidationFailure(action);
   if (quantityFailure) return quantityFailure;
+  const moneyFailure = buildMoneyValidationFailure(action);
+  if (moneyFailure) return moneyFailure;
 
   const canonicalInput = action.input || {};
-  const sku = toText(canonicalInput.sku).toUpperCase();
+  const sku = normalizeSku(canonicalInput.sku);
   const brand = toText(canonicalInput.brand);
-  const size = toText(canonicalInput.size, "均码");
+  const size = normalizeSize(canonicalInput.size, "均码");
   const quantity = Math.max(1, Math.floor(toNumber(canonicalInput.quantity ?? canonicalInput.count, 1)));
   const cost = toNumber(canonicalInput.cost ?? canonicalInput.price, 0);
   const warehouse = findWarehouseName(canonicalInput, context);
@@ -581,8 +613,8 @@ const previewInbound = (input: Record<string, unknown>, context: any): ActionRes
 
   const existing = Array.isArray(context?.products)
     ? context.products.find((item: any) =>
-        toText(item.sku).toUpperCase() === sku &&
-        toText(item.size, "均码") === size &&
+        normalizeSku(item.sku) === sku &&
+        normalizeSize(item.size, "均码") === size &&
         toText(item.warehouse) === warehouse)
     : null;
 
@@ -590,14 +622,14 @@ const previewInbound = (input: Record<string, unknown>, context: any): ActionRes
     return {
       type: "inbound",
       status: "planned",
-      summary: `计划入库 ${brand} / ${productName} / ${sku} / ${size}码 x${quantity}，仓库 ${warehouse}。将与现有库存合并，当前库存 ${toNumber(existing.stock)}。`,
+      summary: `计划入库 ${brand} / ${productName} / ${sku} / ${formatSize(size)} x${quantity}，仓库 ${warehouse}。将与现有库存合并，当前库存 ${toNumber(existing.stock)}。`,
     };
   }
 
   return {
     type: "inbound",
     status: "planned",
-    summary: `计划新增入库 ${brand} / ${productName} / ${sku} / ${size}码 x${quantity}，成本 ${cost || 0}，仓库 ${warehouse}。`,
+    summary: `计划新增入库 ${brand} / ${productName} / ${sku} / ${formatSize(size)} x${quantity}，成本 ${cost || 0}，仓库 ${warehouse}。`,
   };
 };
 
@@ -607,19 +639,21 @@ const previewOutbound = (input: Record<string, unknown>, context: any): ActionRe
   if (missingFields.length > 0) return buildValidationFailure(action, missingFields);
   const quantityFailure = buildQuantityValidationFailure(action);
   if (quantityFailure) return quantityFailure;
+  const moneyFailure = buildMoneyValidationFailure(action);
+  if (moneyFailure) return moneyFailure;
 
   const canonicalInput = action.input || {};
-  const sku = toText(canonicalInput.sku).toUpperCase();
+  const sku = normalizeSku(canonicalInput.sku);
   const brand = toText(canonicalInput.brand);
-  const size = toText(canonicalInput.size);
+  const size = normalizeSize(canonicalInput.size);
   const quantity = Math.max(1, Math.floor(toNumber(canonicalInput.quantity ?? canonicalInput.count, 1)));
   const salePrice = toNumber(canonicalInput.salePrice ?? canonicalInput.sellingPrice, 0);
   const warehouse = toText(canonicalInput.warehouse);
 
   const matches = Array.isArray(context?.products)
     ? context.products.filter((item: any) =>
-        toText(item.sku).toUpperCase() === sku &&
-        (!size || toText(item.size) === size) &&
+        normalizeSku(item.sku) === sku &&
+        (!size || normalizeSize(item.size, "均码") === size) &&
         (!warehouse || toText(item.warehouse) === warehouse))
     : [];
 
@@ -628,7 +662,7 @@ const previewOutbound = (input: Record<string, unknown>, context: any): ActionRe
     return {
       type: "outbound",
       status: "failed",
-      summary: `计划失败：库存中未找到 ${sku}${size ? ` ${size}码` : ""}${warehouse ? ` / ${warehouse}` : ""}。`,
+      summary: `计划失败：库存中未找到 ${sku}${size ? ` ${formatSize(size)}` : ""}${warehouse ? ` / ${warehouse}` : ""}。`,
     };
   }
 
@@ -636,14 +670,14 @@ const previewOutbound = (input: Record<string, unknown>, context: any): ActionRe
     return {
       type: "outbound",
       status: "failed",
-      summary: `计划失败：${sku} ${toText(product.size)}码库存不足，当前仅剩 ${toNumber(product.stock)}。`,
+      summary: `计划失败：${sku} ${formatSize(product.size)}库存不足，当前仅剩 ${toNumber(product.stock)}。`,
     };
   }
 
   return {
     type: "outbound",
     status: "planned",
-    summary: `计划出库 ${brand} / ${toText(product.name, sku)} / ${sku} / ${toText(product.size)}码 x${quantity}，售价 ${salePrice}，仓库 ${toText(product.warehouse, "未设置")}。`,
+    summary: `计划出库 ${brand} / ${toText(product.name, sku)} / ${sku} / ${formatSize(product.size)} x${quantity}，售价 ${salePrice}，仓库 ${toText(product.warehouse, "未设置")}。`,
   };
 };
 
@@ -669,36 +703,39 @@ const executeInbound = async (db: any, userId: string, input: Record<string, unk
   if (missingFields.length > 0) return buildValidationFailure(action, missingFields);
   const quantityFailure = buildQuantityValidationFailure(action);
   if (quantityFailure) return quantityFailure;
+  const moneyFailure = buildMoneyValidationFailure(action);
+  if (moneyFailure) return moneyFailure;
 
   const canonicalInput = action.input || {};
-  const sku = toText(canonicalInput.sku).toUpperCase();
-  const size = toText(canonicalInput.size, "均码");
+  const sku = normalizeSku(canonicalInput.sku);
+  const size = normalizeSize(canonicalInput.size, "均码");
   const quantity = Math.max(1, Math.floor(toNumber(canonicalInput.quantity ?? canonicalInput.count, 1)));
   const cost = toNumber(canonicalInput.cost ?? canonicalInput.price, 0);
   const warehouse = findWarehouseName(canonicalInput, context);
 
-  const { data: existing, error: findError } = await db
+  const { data: candidates, error: findError } = await db
     .from("products")
     .select("*")
     .eq("user_id", userId)
-    .eq("sku", sku)
-    .eq("size", size)
+    .ilike("sku", sku)
     .eq("warehouse", warehouse)
-    .maybeSingle();
+    .order("created_at", { ascending: false })
+    .limit(50);
 
   if (findError) throw findError;
+  const existing = candidates?.find((item: any) => normalizeSize(item.size, "均码") === size);
 
   const now = new Date().toISOString();
   const productName = toText(canonicalInput.name, existing?.name || sku);
-  const brand = toText(canonicalInput.brand, existing?.brand || "Unknown");
+  const brand = toText(canonicalInput.brand, existing?.brand || "未知品牌");
   const imageUrl = toText(canonicalInput.imageUrl ?? canonicalInput.image_url, existing?.image_url || `https://picsum.photos/200/200?random=${Date.now()}`);
   const location = toText(canonicalInput.location, existing?.location || "待分配");
 
   if (existing) {
     const nextStock = Number(existing.stock || 0) + quantity;
-    const nextCost = cost > 0
-      ? Number((((Number(existing.price || 0) * Number(existing.stock || 0)) + (cost * quantity)) / nextStock).toFixed(2))
-      : Number(existing.price || 0);
+    const nextCost = Number(
+      (((Number(existing.price || 0) * Number(existing.stock || 0)) + (cost * quantity)) / nextStock).toFixed(2),
+    );
 
     const { error } = await db
       .from("products")
@@ -757,7 +794,7 @@ const executeInbound = async (db: any, userId: string, input: Record<string, unk
   return {
     type: "inbound",
     status: "success",
-    summary: `已入库 ${sku} ${size} x${quantity}，仓库：${warehouse}`,
+    summary: `已入库 ${sku} ${formatSize(size)} x${quantity}，仓库：${warehouse}`,
   };
 };
 
@@ -767,10 +804,12 @@ const executeOutbound = async (db: any, userDb: any, userId: string, input: Reco
   if (missingFields.length > 0) return buildValidationFailure(action, missingFields);
   const quantityFailure = buildQuantityValidationFailure(action);
   if (quantityFailure) return quantityFailure;
+  const moneyFailure = buildMoneyValidationFailure(action);
+  if (moneyFailure) return moneyFailure;
 
   const canonicalInput = action.input || {};
-  const sku = toText(canonicalInput.sku).toUpperCase();
-  const size = toText(canonicalInput.size);
+  const sku = normalizeSku(canonicalInput.sku);
+  const size = normalizeSize(canonicalInput.size);
   const quantity = Math.max(1, Math.floor(toNumber(canonicalInput.quantity ?? canonicalInput.count, 1)));
   const salePrice = toNumber(canonicalInput.salePrice ?? canonicalInput.sellingPrice, 0);
   const warehouse = toText(canonicalInput.warehouse);
@@ -779,18 +818,17 @@ const executeOutbound = async (db: any, userDb: any, userId: string, input: Reco
     .from("products")
     .select("*")
     .eq("user_id", userId)
-    .eq("sku", sku)
+    .ilike("sku", sku)
     .gt("stock", 0)
     .order("created_at", { ascending: false })
-    .limit(1);
+    .limit(50);
 
-  if (size) query = query.eq("size", size);
   if (warehouse) query = query.eq("warehouse", warehouse);
 
   const { data: matches, error: findError } = await query;
   if (findError) throw findError;
 
-  const product = matches?.[0];
+  const product = matches?.find((item: any) => !size || normalizeSize(item.size, "均码") === size);
   if (!product) {
     return { type: "outbound", status: "failed", summary: `出库失败：没有找到可出库的 ${sku}${size ? ` ${size}` : ""}。` };
   }
