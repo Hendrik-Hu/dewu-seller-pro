@@ -24,6 +24,7 @@ export const ActivityLedgerModal: React.FC<ActivityLedgerModalProps> = ({ isOpen
   const [repairs, setRepairs] = useState<DataRepairAudit[]>([]);
   const [search, setSearch] = useState('');
   const [type, setType] = useState<Activity['type'] | 'all'>('all');
+  const [settlement, setSettlement] = useState<'all' | 'pending' | 'settled'>('all');
   const [warehouse, setWarehouse] = useState('all');
   const [period, setPeriod] = useState<'all' | 'month' | '30days'>('all');
   const [page, setPage] = useState(1);
@@ -41,7 +42,7 @@ export const ActivityLedgerModal: React.FC<ActivityLedgerModalProps> = ({ isOpen
     const timer = window.setTimeout(async () => {
       try {
         if (view === 'activities') {
-          const result = await listActivityPage({ userId, search, type, warehouse, period, page, pageSize: PAGE_SIZE });
+          const result = await listActivityPage({ userId, search, type, settlement, warehouse, period, page, pageSize: PAGE_SIZE });
           if (!cancelled) {
             setActivities(result.activities);
             setTotalCount(result.totalCount);
@@ -63,9 +64,9 @@ export const ActivityLedgerModal: React.FC<ActivityLedgerModalProps> = ({ isOpen
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [isOpen, userId, view, search, type, warehouse, period, page, reloadKey]);
+  }, [isOpen, userId, view, search, type, settlement, warehouse, period, page, reloadKey]);
 
-  useEffect(() => setPage(1), [view, search, type, warehouse, period]);
+  useEffect(() => setPage(1), [view, search, type, settlement, warehouse, period]);
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   if (!isOpen) return null;
@@ -92,10 +93,21 @@ export const ActivityLedgerModal: React.FC<ActivityLedgerModalProps> = ({ isOpen
               <Search size={16} className="text-slate-400" />
               <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索商品名称或货号" className="min-w-0 flex-1 bg-transparent py-2 text-sm outline-none dark:text-white" />
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              <select value={type} onChange={(event) => setType(event.target.value as Activity['type'] | 'all')} className="min-w-0 rounded-lg border border-slate-200 bg-white px-1.5 py-2 text-[11px] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white">
+            <div className="grid grid-cols-2 gap-2">
+              <select value={type} onChange={(event) => {
+                const nextType = event.target.value as Activity['type'] | 'all';
+                setType(nextType);
+                if (nextType !== 'all' && nextType !== 'outbound') setSettlement('all');
+              }} className="min-w-0 rounded-lg border border-slate-200 bg-white px-1.5 py-2 text-[11px] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white">
                 <option value="all">全部类型</option>
                 {Object.entries(ACTIVITY_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+              <select value={settlement} onChange={(event) => {
+                const nextSettlement = event.target.value as 'all' | 'pending' | 'settled';
+                setSettlement(nextSettlement);
+                if (nextSettlement !== 'all') setType('outbound');
+              }} className="min-w-0 rounded-lg border border-slate-200 bg-white px-1.5 py-2 text-[11px] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white">
+                <option value="all">全部结算状态</option><option value="pending">待结算</option><option value="settled">已结算</option>
               </select>
               <select value={warehouse} onChange={(event) => setWarehouse(event.target.value)} className="min-w-0 rounded-lg border border-slate-200 bg-white px-1.5 py-2 text-[11px] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white">
                 <option value="all">全部仓库</option>

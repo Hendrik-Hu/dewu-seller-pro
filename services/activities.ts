@@ -7,6 +7,7 @@ export interface ActivityPageParams {
   userId: string;
   search?: string;
   type?: Activity['type'] | 'all';
+  settlement?: 'all' | 'pending' | 'settled';
   warehouse?: string;
   period?: 'all' | 'month' | '30days';
   page?: number;
@@ -24,6 +25,7 @@ export const listActivityPage = async ({
   userId,
   search,
   type = 'all',
+  settlement = 'all',
   warehouse = 'all',
   period = 'all',
   page = 1,
@@ -35,6 +37,12 @@ export const listActivityPage = async ({
     .eq('user_id', userId);
 
   if (type !== 'all') query = query.eq('type', type);
+  if (settlement !== 'all') {
+    query = query.eq('type', 'outbound');
+    query = settlement === 'settled'
+      ? query.gt('settlement_revision', 0)
+      : query.or('settlement_revision.is.null,settlement_revision.eq.0');
+  }
   if (warehouse !== 'all') query = query.eq('warehouse', warehouse);
   if (search?.trim()) {
     const value = escapeOrValue(search.trim());

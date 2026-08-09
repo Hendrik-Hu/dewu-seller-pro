@@ -74,9 +74,27 @@ test('estimated and actual net profit remain separate and unknown fees do not in
   ], new Date('2026-08-08T12:00:00+08:00'));
 
   assert.equal(analytics.monthly.estimatedNetProfitAmount, 80);
+  assert.equal(analytics.monthly.estimatedProfitCount, 3);
   assert.equal(analytics.monthly.actualNetProfitAmount, 50);
+  assert.equal(analytics.monthly.actualProfitCount, 2);
   assert.equal(analytics.monthly.pendingSettlementCount, 2);
   assert.equal(analytics.monthly.settlementCoverageRate, 60);
   assert.equal(analytics.monthly.estimatedProfitCoverageRate, 75);
   assert.equal(analytics.monthly.actualProfitCoverageRate, 50);
+});
+
+test('zero profit totals remain distinguishable from having no calculable profit records', () => {
+  const empty = buildInventoryAnalytics([], [], new Date('2026-08-08T12:00:00+08:00'));
+  assert.equal(empty.monthly.estimatedNetProfitAmount, 0);
+  assert.equal(empty.monthly.estimatedProfitCount, 0);
+  assert.equal(empty.monthly.actualNetProfitAmount, 0);
+  assert.equal(empty.monthly.actualProfitCount, 0);
+
+  const calculatedZero = buildInventoryAnalytics([], [
+    activity({ id: 'zero-profit', price: 100, cost: 100, count: 1, estimatedNetProfit: 0, actualPlatformFee: 0, actualNetProfit: 0 }),
+  ], new Date('2026-08-08T12:00:00+08:00'));
+  assert.equal(calculatedZero.monthly.estimatedNetProfitAmount, 0);
+  assert.equal(calculatedZero.monthly.estimatedProfitCount, 1);
+  assert.equal(calculatedZero.monthly.actualNetProfitAmount, 0);
+  assert.equal(calculatedZero.monthly.actualProfitCount, 1);
 });

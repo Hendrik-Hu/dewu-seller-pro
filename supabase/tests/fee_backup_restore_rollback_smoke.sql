@@ -12,8 +12,10 @@ declare
   v_first jsonb;
   v_repeat jsonb;
   v_second_operation jsonb;
+  v_changed_package jsonb;
   v_snapshot jsonb;
   v_scheme_id uuid;
+  v_cross_generation_rejected boolean:=false;
 begin
   select id into v_user from auth.users order by created_at limit 1;
   if v_user is null then raise exception 'Smoke test requires one auth user'; end if;
@@ -65,6 +67,14 @@ begin
   if (v_second_operation->>'skipped')::integer<>2 then raise exception 'Same package with a new operation duplicated records: %',v_second_operation; end if;
   if (select count(*) from public.activities where user_id=v_user and sku='FEE-BACKUP-'||v_suffix)<>1 then raise exception 'Activity duplicated'; end if;
   if (select count(*) from public.fee_schemes where user_id=v_user and name='Fee backup smoke')<>1 then raise exception 'Fee scheme duplicated'; end if;
+
+  v_changed_package:=jsonb_set(v_package,'{exportedAt}',to_jsonb((now()+interval '1 second')::text));
+  begin
+    perform public.restore_ledger_backup(v_user,'fee-cross-generation-'||v_suffix,v_changed_package,true);
+  exception when others then
+    v_cross_generation_rejected:=sqlerrm like '%different generation%';
+  end;
+  if not v_cross_generation_rejected then raise exception 'Changed v2 package reused an activity sourceId without rejection'; end if;
 
   v_v1:=v_package#-'{data,feeSchemes}'#-'{counts,feeSchemes}';
   v_v1:=jsonb_set(v_v1,'{schemaVersion}','"dewu-seller-pro/ledger-backup@1"'::jsonb);
