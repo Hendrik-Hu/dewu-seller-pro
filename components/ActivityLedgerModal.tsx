@@ -138,6 +138,7 @@ export const ActivityLedgerModal: React.FC<ActivityLedgerModalProps> = ({ isOpen
                       <span>成本 {activity.cost == null ? '未记录' : `¥${activity.cost}`}</span>
                       <span>{activity.platform || '未记录平台'}</span>
                       <span>{activity.source || '未记录来源'}</span>
+                      {activity.type === 'outbound' && <><span>平台费用 {activity.estimatedPlatformFee == null ? '未知' : `¥${activity.estimatedPlatformFee.toFixed(2)}`}</span><span>预计到手 {activity.estimatedNetProceeds == null ? '未知' : `¥${activity.estimatedNetProceeds.toFixed(2)}`}</span><span>预计净利润 {activity.estimatedNetProfit == null ? '未知' : `¥${activity.estimatedNetProfit.toFixed(2)}`}</span></>}
                     </div>
                     {quantity === 0 && <div className="mt-2 flex items-center gap-1 text-[11px] text-red-500"><AlertTriangle size={12} />异常流水，不计入经营统计</div>}
                   </div>;

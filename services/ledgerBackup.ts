@@ -6,12 +6,12 @@ const safeText = (value: unknown) => value == null ? '' : String(value);
 const safeNumber = (value: unknown) => value == null ? null : Number(value);
 
 export const createFullLedgerBackup = async (userId: string): Promise<LedgerBackupPackage> => {
-  const [products, activities, warehouses, repairs] = await Promise.all([
+  const [products, activities, warehouses, repairs, feeSchemes] = await Promise.all([
     fetchAllPages((from, to) => supabase.from('products')
       .select('id,name,brand,size,sku,price,stock,status,location,warehouse,source,created_at,deleted_at', { count: 'exact' })
       .eq('user_id', userId).order('created_at').order('id').range(from, to), { getKey: (row: any) => String(row.id), label: '商品账本' }),
     fetchAllPages((from, to) => supabase.from('activities')
-      .select('id,type,product_name,sku,size,price,cost,count,warehouse,platform,source,created_at', { count: 'exact' })
+      .select('id,type,product_name,sku,size,price,cost,count,warehouse,platform,source,created_at,fee_snapshot,estimated_platform_fee,estimated_net_proceeds,estimated_net_profit', { count: 'exact' })
       .eq('user_id', userId).order('created_at').order('id').range(from, to), { getKey: (row: any) => String(row.id), label: '库存流水' }),
     fetchAllPages((from, to) => supabase.from('warehouses')
       .select('id,name,is_default,created_at', { count: 'exact' })
@@ -19,6 +19,9 @@ export const createFullLedgerBackup = async (userId: string): Promise<LedgerBack
     fetchAllPages((from, to) => supabase.from('data_repair_audit')
       .select('id,target_table,record_id,field_name,old_value,new_value,old_status,new_status,reason,created_at', { count: 'exact' })
       .eq('user_id', userId).order('created_at').order('id').range(from, to), { getKey: (row: any) => String(row.id), label: '数据修复审计' }),
+    fetchAllPages((from, to) => supabase.from('fee_schemes')
+      .select('id,name,sale_mode,category,percent_rate,percent_min,percent_max,percentage_unit,fixed_fee,fixed_fee_unit,shipping_fee,shipping_fee_unit,other_fee,other_fee_unit,effective_from,is_default,created_at,updated_at', { count: 'exact' })
+      .eq('user_id', userId).order('created_at').order('id').range(from, to), { getKey: (row: any) => String(row.id), label: '费用方案' }),
   ]);
 
   return buildLedgerBackupPackage({
@@ -32,6 +35,8 @@ export const createFullLedgerBackup = async (userId: string): Promise<LedgerBack
       sourceId: safeText(row.id), type: safeText(row.type), productName: safeText(row.product_name), sku: safeText(row.sku),
       size: safeText(row.size), price: safeNumber(row.price), cost: safeNumber(row.cost), count: safeNumber(row.count),
       warehouse: safeText(row.warehouse), platform: safeText(row.platform), source: safeText(row.source), createdAt: safeText(row.created_at),
+      feeSnapshot: row.fee_snapshot ?? null, estimatedPlatformFee: safeNumber(row.estimated_platform_fee),
+      estimatedNetProceeds: safeNumber(row.estimated_net_proceeds), estimatedNetProfit: safeNumber(row.estimated_net_profit),
     })),
     warehouses: warehouses.map((row: any) => ({
       sourceId: safeText(row.id), name: safeText(row.name), isDefault: Boolean(row.is_default), createdAt: safeText(row.created_at),
@@ -40,6 +45,14 @@ export const createFullLedgerBackup = async (userId: string): Promise<LedgerBack
       sourceId: safeText(row.id), targetTable: safeText(row.target_table), recordId: safeText(row.record_id), fieldName: safeText(row.field_name),
       oldValue: safeNumber(row.old_value), newValue: safeNumber(row.new_value), oldStatus: row.old_status == null ? null : safeText(row.old_status),
       newStatus: row.new_status == null ? null : safeText(row.new_status), reason: safeText(row.reason), createdAt: safeText(row.created_at),
+    })),
+    feeSchemes: feeSchemes.map((row: any) => ({
+      sourceId: safeText(row.id), name: safeText(row.name), saleMode: safeText(row.sale_mode), category: safeText(row.category),
+      percentRate: safeNumber(row.percent_rate), percentMin: safeNumber(row.percent_min), percentMax: safeNumber(row.percent_max),
+      percentageUnit: safeText(row.percentage_unit), fixedFee: safeNumber(row.fixed_fee), fixedFeeUnit: safeText(row.fixed_fee_unit),
+      shippingFee: safeNumber(row.shipping_fee), shippingFeeUnit: safeText(row.shipping_fee_unit), otherFee: safeNumber(row.other_fee),
+      otherFeeUnit: safeText(row.other_fee_unit), effectiveFrom: safeText(row.effective_from), isDefault: Boolean(row.is_default),
+      createdAt: safeText(row.created_at), updatedAt: safeText(row.updated_at),
     })),
   });
 };

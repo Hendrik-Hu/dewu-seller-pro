@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { Product } from '../types';
-import { createInventoryActivity } from './activities';
 import { normalizeOutboundQuantity, normalizeSalePrice } from '../lib/outboundRules';
+import type { OutboundFeeSelection } from '../types';
 
 export interface OutboundParams {
   product: Product;
@@ -9,65 +9,9 @@ export interface OutboundParams {
   salePrice: number;
   quantity?: number;
   platform?: string;
+  operationId: string;
+  feeSelection: OutboundFeeSelection;
 }
-
-const isMissingRpcError = (error: any) => {
-  const message = String(error?.message || '');
-  return error?.code === 'PGRST202' || message.includes('Could not find the function');
-};
-
-const fallbackOutboundProduct = async ({
-  product,
-  userId,
-  salePrice,
-  quantity = 1,
-}: OutboundParams) => {
-  const validatedQuantity = normalizeOutboundQuantity(quantity, product.stock);
-  const validatedSalePrice = normalizeSalePrice(salePrice);
-  const nextStock = product.stock - validatedQuantity;
-
-  const { data: updatedRows, error: updateError } = await supabase
-    .from('products')
-    .update({
-      stock: nextStock,
-      status: nextStock <= 0 ? 'sold' : product.status,
-    })
-    .eq('id', product.id)
-    .eq('user_id', userId)
-    .eq('stock', product.stock)
-    .select('id');
-
-  if (updateError) throw updateError;
-  if (!updatedRows?.length) {
-    throw new Error('库存已变化，请刷新后重试。');
-  }
-
-  await createInventoryActivity({
-    userId,
-    type: 'outbound',
-    productName: product.name,
-    sku: product.sku,
-    size: product.size,
-    price: validatedSalePrice,
-    cost: product.price,
-    imageUrl: product.imageUrl,
-    warehouse: product.warehouse,
-    count: validatedQuantity,
-  }).catch(async (activityError) => {
-    const { error: rollbackError } = await supabase
-      .from('products')
-      .update({ stock: product.stock, status: product.status })
-      .eq('id', product.id)
-      .eq('user_id', userId)
-      .eq('stock', nextStock);
-
-    if (rollbackError) {
-      throw new Error(`出库流水写入失败，库存自动恢复也失败：${String(activityError?.message || activityError)}`);
-    }
-
-    throw activityError;
-  });
-};
 
 export const outboundProduct = async ({
   product,
@@ -75,26 +19,27 @@ export const outboundProduct = async ({
   salePrice,
   quantity = 1,
   platform = '得物',
+  operationId,
+  feeSelection,
 }: OutboundParams) => {
   const validatedQuantity = normalizeOutboundQuantity(quantity, product.stock);
   const validatedSalePrice = normalizeSalePrice(salePrice);
 
   if (!product.id || !userId) throw new Error('商品或用户信息不完整，请刷新后重试。');
 
-  const { error } = await supabase.rpc('outbound_product', {
-    p_product_id: product.id,
-    p_user_id: userId,
-    p_sale_price: validatedSalePrice,
-    p_quantity: validatedQuantity,
+  if (!operationId || operationId.length < 8) throw new Error('出库操作号无效，请重新打开出库页面。');
+
+  const { data, error } = await supabase.rpc('outbound_product_with_fees', {
+    p_fee_scheme_id: feeSelection.schemeId || null,
+    p_fee_scheme_updated_at: feeSelection.schemeUpdatedAt || null,
+    p_manual_fee_override: feeSelection.manualFeeOverride ?? null,
+    p_operation_id: operationId,
     p_platform: platform,
+    p_product_id: product.id,
+    p_quantity: validatedQuantity,
+    p_sale_price: validatedSalePrice,
+    p_user_id: userId,
   });
-
-  if (!error) return;
-
-  if (isMissingRpcError(error)) {
-    await fallbackOutboundProduct({ product, userId, salePrice: validatedSalePrice, quantity: validatedQuantity, platform });
-    return;
-  }
-
-  throw error;
+  if (error) throw error;
+  return data;
 };

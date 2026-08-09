@@ -109,7 +109,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ isOpen, 
                 <FileSpreadsheet size={20} className="text-emerald-600" /><div className="flex-1"><div className="text-sm font-medium text-slate-800 dark:text-white">库存 CSV</div><div className="text-[11px] text-slate-400">人可读清单，包含当前与回收站商品</div></div>{busy === 'csv' ? <Loader2 size={17} className="animate-spin" /> : <Download size={17} />}
               </button>
               <button onClick={exportJson} disabled={Boolean(busy)} className="flex w-full items-center gap-3 p-3 text-left disabled:opacity-50">
-                <FileJson size={20} className="text-blue-600" /><div className="flex-1"><div className="text-sm font-medium text-slate-800 dark:text-white">JSON 账本包</div><div className="text-[11px] text-slate-400">商品、流水、仓库、修复审计与完整性校验</div></div>{busy === 'json' ? <Loader2 size={17} className="animate-spin" /> : <Download size={17} />}
+                <FileJson size={20} className="text-blue-600" /><div className="flex-1"><div className="text-sm font-medium text-slate-800 dark:text-white">JSON 账本包</div><div className="text-[11px] text-slate-400">商品、流水、费用快照、费用方案、仓库与修复审计</div></div>{busy === 'json' ? <Loader2 size={17} className="animate-spin" /> : <Download size={17} />}
               </button>
             </div>
             <div className="mt-2 flex gap-2 rounded-lg border border-amber-100 bg-amber-50 p-2 text-[11px] leading-4 text-amber-700 dark:border-amber-900/30 dark:bg-amber-950/20 dark:text-amber-300">

@@ -67,6 +67,10 @@ export const mapActivityFromDb = (row: any): Activity => ({
   count: row.count === undefined || row.count === null || row.count === '' ? undefined : Number(row.count),
   source: row.source || '',
   platform: row.platform || '',
+  feeSnapshot: row.fee_snapshot || undefined,
+  estimatedPlatformFee: row.estimated_platform_fee == null ? undefined : Number(row.estimated_platform_fee),
+  estimatedNetProceeds: row.estimated_net_proceeds == null ? undefined : Number(row.estimated_net_proceeds),
+  estimatedNetProfit: row.estimated_net_profit == null ? undefined : Number(row.estimated_net_profit),
 });
 
 export const mapActivityToDb = (activity: Activity, userId: string) => ({
@@ -84,6 +88,10 @@ export const mapActivityToDb = (activity: Activity, userId: string) => ({
   count: normalizeActivityCountForWrite(activity.count),
   source: activity.source || '',
   platform: activity.platform || '',
+  fee_snapshot: activity.feeSnapshot || null,
+  estimated_platform_fee: activity.estimatedPlatformFee ?? null,
+  estimated_net_proceeds: activity.estimatedNetProceeds ?? null,
+  estimated_net_profit: activity.estimatedNetProfit ?? null,
   user_id: userId,
 });
 

@@ -43,6 +43,10 @@ export interface Activity {
   count?: number;
   source?: string;
   platform?: string;
+  feeSnapshot?: Record<string, unknown>;
+  estimatedPlatformFee?: number;
+  estimatedNetProceeds?: number;
+  estimatedNetProfit?: number;
 }
 
 export interface SalesStat {
@@ -54,6 +58,59 @@ export interface Warehouse {
   id: string;
   name: string;
   is_default?: boolean;
+}
+
+export interface FeeScheme {
+  id: string;
+  name: string;
+  saleMode: string;
+  category: string;
+  percentRate: number;
+  percentMin?: number;
+  percentMax?: number;
+  percentageUnit: 'transaction' | 'item';
+  fixedFee: number;
+  fixedFeeUnit: 'transaction' | 'item';
+  shippingFee: number;
+  shippingFeeUnit: 'transaction' | 'item';
+  otherFee: number;
+  otherFeeUnit: 'transaction' | 'item';
+  effectiveFrom: string;
+  isDefault: boolean;
+  updatedAt: string;
+}
+
+export interface FeeQuote {
+  known: boolean;
+  grossAmount: number;
+  costAmount: number;
+  percentageCalculated?: number;
+  percentageApplied?: number;
+  percentageUnit?: 'transaction' | 'item';
+  percentageUnitCount?: number;
+  fixedFee?: number;
+  fixedFeeUnit?: 'transaction' | 'item';
+  fixedFeeMultiplier?: number;
+  shippingFee?: number;
+  shippingFeeUnit?: 'transaction' | 'item';
+  shippingFeeMultiplier?: number;
+  otherFee?: number;
+  otherFeeUnit?: 'transaction' | 'item';
+  otherFeeMultiplier?: number;
+  calculatedFee?: number;
+  manualFeeOverride?: number;
+  totalFee?: number;
+  netProceeds?: number;
+  netProfit?: number;
+  netMarginRate?: number;
+  breakEvenUnitPrice?: number;
+}
+
+export interface OutboundFeeSelection {
+  schemeId?: string;
+  schemeUpdatedAt?: string;
+  manualFeeOverride?: number;
+  quote: FeeQuote;
 }
 
 export interface MenuItem {

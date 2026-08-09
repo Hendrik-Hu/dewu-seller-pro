@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { ArchiveRestore, ChevronRight, LogOut, Edit2, Check, X, Camera, Moon, LayoutGrid, ToggleLeft, ToggleRight, Shield, Download, UserRound, ShieldAlert } from 'lucide-react';
+import { ArchiveRestore, Calculator, ChevronRight, LogOut, Edit2, Check, X, Camera, Moon, LayoutGrid, ToggleLeft, ToggleRight, Shield, Download, UserRound, ShieldAlert } from 'lucide-react';
 
 import { AccountSecurityModal } from './AccountSecurityModal';
 
@@ -26,6 +26,7 @@ interface ProfileProps {
   onRecycleBinClick: () => void;
   onExportClick: () => void;
   onDataHealthClick: () => void;
+  onFeeSchemesClick: () => void;
   dataIssueCount: number;
   appVersion: string;
 }
@@ -46,6 +47,7 @@ export const Profile: React.FC<ProfileProps> = ({
   onRecycleBinClick,
   onExportClick,
   onDataHealthClick,
+  onFeeSchemesClick,
   dataIssueCount,
   appVersion,
 }) => {
@@ -68,6 +70,7 @@ export const Profile: React.FC<ProfileProps> = ({
       },
       { icon: ArchiveRestore, label: '回收站', action: onRecycleBinClick },
       { icon: Download, label: '导出与恢复', action: onExportClick },
+      { icon: Calculator, label: '费用方案', action: onFeeSchemesClick },
     ],
     [
       { 

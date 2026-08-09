@@ -10,12 +10,13 @@ import { RecycleBinModal } from './components/RecycleBinModal';
 import { TransferProductModal } from './components/TransferProductModal';
 import { DataHealthModal } from './components/DataHealthModal';
 import { BackupRestoreModal } from './components/BackupRestoreModal';
+import { FeeSchemeModal } from './components/FeeSchemeModal';
 import { AddProductModal } from './components/AddProductModal';
 import { OutboundModal } from './components/OutboundModal';
 import { PendingOrdersModal } from './components/PendingOrdersModal';
 import { WidgetSettingsModal } from './components/WidgetSettingsModal';
 import { updateWidgetData } from './utils/widget';
-import { Tab, Product, Activity, Warehouse } from './types';
+import { Tab, Product, Activity, Warehouse, OutboundFeeSelection } from './types';
 import { supabase } from './lib/supabase';
 import { createInventoryActivity, listActivities } from './services/activities';
 import { batchInboundProducts, batchUpdateProductStatus, deleteProduct, listAllProducts, syncProductMainImageBySku, upsertProduct } from './services/products';
@@ -185,6 +186,7 @@ export default function App() {
   const [showRecycleBin, setShowRecycleBin] = useState(false);
   const [showDataHealth, setShowDataHealth] = useState(false);
   const [showBackupRestore, setShowBackupRestore] = useState(false);
+  const [showFeeSchemes, setShowFeeSchemes] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transferProductTarget, setTransferProductTarget] = useState<Product | null>(null);
   
@@ -568,7 +570,7 @@ export default function App() {
     }
   };
 
-  const handleOutboundProduct = async (product: Product, price: number, quantity: number = 1, platform: string = '得物') => {
+  const handleOutboundProduct = async (product: Product, price: number, quantity: number, feeSelection: OutboundFeeSelection, operationId: string, platform: string = '得物') => {
     if (!session?.user?.id) return;
     
     try {
@@ -578,6 +580,8 @@ export default function App() {
         salePrice: price,
         quantity,
         platform,
+        feeSelection,
+        operationId,
       });
 
       fetchData();
@@ -740,6 +744,7 @@ export default function App() {
             onRecycleBinClick={() => setShowRecycleBin(true)}
             onExportClick={() => setShowBackupRestore(true)}
             onDataHealthClick={() => setShowDataHealth(true)}
+            onFeeSchemesClick={() => setShowFeeSchemes(true)}
             dataIssueCount={inventoryAnalytics.dataQuality.negativeStockCount + inventoryAnalytics.dataQuality.invalidActivityCount}
             appVersion={__APP_VERSION__}
           />
@@ -802,6 +807,7 @@ export default function App() {
               isOpen={showOutboundModal}
               onClose={() => setShowOutboundModal(false)}
               products={products}
+              userId={session.user.id}
               onOutbound={handleOutboundProduct}
             />
             <PendingOrdersModal
@@ -836,6 +842,11 @@ export default function App() {
                 fetchData();
                 setRefreshTrigger((value) => value + 1);
               }}
+            />
+            <FeeSchemeModal
+              isOpen={showFeeSchemes}
+              userId={session.user.id}
+              onClose={() => setShowFeeSchemes(false)}
             />
             <TransferProductModal
               isOpen={showTransferModal}

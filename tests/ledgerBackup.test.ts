@@ -1,20 +1,38 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildLedgerBackupPackage, parseLedgerBackupPackage, serializeLedgerBackupPackage } from '../lib/ledgerBackup.ts';
+import { buildLedgerBackupPackage, parseLedgerBackupPackage, serializeLedgerBackupPackage, stableStringify } from '../lib/ledgerBackup.ts';
 
 const data = {
   products: [{ sourceId: 'p1', sku: 'DD1391', deletedAt: null }, { sourceId: 'p2', sku: 'A1', deletedAt: '2026-01-01' }],
   activities: [{ sourceId: 'a1', type: 'inbound' }],
   warehouses: [{ sourceId: 'w1', name: '主仓' }],
   repairs: [{ sourceId: 'r1', targetTable: 'products' }],
+  feeSchemes: [{ sourceId: 'f1', name: '得物普通出售' }],
 };
 
 test('full ledger backup contains version, counts, media warning and valid integrity hash', async () => {
   const backup = await buildLedgerBackupPackage(data, '2026-08-10T00:00:00.000Z');
-  assert.equal(backup.schemaVersion, 'dewu-seller-pro/ledger-backup@1');
-  assert.deepEqual(backup.counts, { products: 2, activeProducts: 1, recycledProducts: 1, activities: 1, warehouses: 1, repairs: 1 });
+  assert.equal(backup.schemaVersion, 'dewu-seller-pro/ledger-backup@2');
+  assert.deepEqual(backup.counts, { products: 2, activeProducts: 1, recycledProducts: 1, activities: 1, warehouses: 1, repairs: 1, feeSchemes: 1 });
   assert.equal(backup.media.included, false);
   assert.equal((await parseLedgerBackupPackage(serializeLedgerBackupPackage(backup))).integrity.value, backup.integrity.value);
+});
+
+test('legacy v1 backup remains parseable with an empty fee scheme collection', async () => {
+  const legacyData = { ...data };
+  delete (legacyData as any).feeSchemes;
+  const unsigned = {
+    schemaVersion: 'dewu-seller-pro/ledger-backup@1', exportedAt: '2026-08-10T00:00:00.000Z', scope: 'full-ledger',
+    counts: { products: 2, activeProducts: 1, recycledProducts: 1, activities: 1, warehouses: 1, repairs: 1 },
+    media: { included: false, note: 'legacy' }, data: legacyData,
+  } as any;
+  const modern = await buildLedgerBackupPackage(data, unsigned.exportedAt);
+  const cryptoHash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(stableStringify(unsigned)));
+  const value = Array.from(new Uint8Array(cryptoHash)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  const parsed = await parseLedgerBackupPackage(JSON.stringify({ ...unsigned, integrity: { algorithm: 'SHA-256', value } }));
+  assert.equal(parsed.schemaVersion, 'dewu-seller-pro/ledger-backup@1');
+  assert.equal(parsed.data.feeSchemes, undefined);
+  assert.equal(modern.data.feeSchemes.length, 1);
 });
 
 test('backup parser rejects unsupported, tampered and count-mismatched packages', async () => {
