@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { readHostedApiKey } from "../_shared/apiKeys.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -52,8 +53,15 @@ serve(async (request) => {
     if (body?.confirmation !== "DELETE_MY_ACCOUNT") return jsonResponse({ error: "请重新输入删除确认词" }, 400);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const anonKey = readHostedApiKey(
+      Deno.env.get("SUPABASE_PUBLISHABLE_KEYS"),
+    );
+    const serviceRoleKey = readHostedApiKey(
+      Deno.env.get("SUPABASE_SECRET_KEYS"),
+    );
+    if (!supabaseUrl || !anonKey || !serviceRoleKey) {
+      return jsonResponse({ error: "账号删除服务暂时不可用，请稍后重试" }, 503);
+    }
     const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authorization } } });
     const serviceClient = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
     const { data: { user }, error: userError } = await userClient.auth.getUser();

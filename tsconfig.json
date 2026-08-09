@@ -27,6 +27,7 @@
     "noEmit": true
   },
   "exclude": [
-    "supabase"
+    "supabase",
+    "dist"
   ]
 }

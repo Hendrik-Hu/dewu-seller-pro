@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { readHostedApiKey } from "../_shared/apiKeys.ts";
 import { evaluateExplicitExecutionIntent } from "../_shared/aiIntent.ts";
 import { buildAiInventorySummary, formatAiInventorySummaryAnswer } from "../_shared/aiInventorySummary.ts";
 import { isExecutablePlan } from "../_shared/aiPlanPolicy.ts";
@@ -841,9 +842,13 @@ serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const signingSecret = Deno.env.get("AI_MANAGER_SIGNING_SECRET") || serviceRoleKey;
+    const anonKey = readHostedApiKey(
+      Deno.env.get("SUPABASE_PUBLISHABLE_KEYS"),
+    );
+    const serviceRoleKey = readHostedApiKey(
+      Deno.env.get("SUPABASE_SECRET_KEYS"),
+    );
+    const signingSecret = Deno.env.get("AI_MANAGER_SIGNING_SECRET");
 
     if (!supabaseUrl || !anonKey || !serviceRoleKey || !signingSecret) {
       return jsonResponse({ error: "Missing Supabase Edge Function environment variables." }, 500);

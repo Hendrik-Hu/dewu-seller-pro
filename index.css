@@ -16,3 +16,8 @@ body,
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+.auth-primary-action {
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+}

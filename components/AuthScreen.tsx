@@ -4,6 +4,7 @@ import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { APP_DISCLAIMER, APP_NAME } from '../lib/brand';
 import { Capacitor } from '@capacitor/core';
 import { PUBLIC_LINKS } from '../lib/publicLinks';
+import { validateAuthCredentials } from '../lib/authValidation';
 
 interface AuthScreenProps {
   onAuthSuccess: () => void;
@@ -126,7 +127,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, isPasswor
             <label className="block text-sm text-slate-600 dark:text-zinc-300">确认新密码
               <input type="password" required minLength={8} autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-dewu-500 dark:border-zinc-700 dark:bg-zinc-800" />
             </label>
-            <button type="submit" disabled={loading} className="flex w-full items-center justify-center rounded-xl bg-slate-900 py-3 font-bold text-white disabled:opacity-50 dark:bg-dewu-500">
+            <button type="submit" disabled={loading} className="auth-primary-action flex w-full items-center justify-center rounded-xl bg-slate-900 py-3 font-bold disabled:opacity-50 dark:bg-dewu-500">
               {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : '更新密码'}
             </button>
           </form>
@@ -137,6 +138,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, isPasswor
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    const validationError = validateAuthCredentials(email, password, isLogin);
+    if (validationError) {
+      alert(validationError);
+      return;
+    }
     setLoading(true);
     
     try {
@@ -213,7 +219,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, isPasswor
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-dewu-500 hover:bg-dewu-600 text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center shadow-lg shadow-dewu-500/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="auth-primary-action w-full bg-dewu-500 hover:bg-dewu-600 font-bold py-3 rounded-xl transition-all flex items-center justify-center shadow-lg shadow-dewu-500/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? <Loader2 className="animate-spin w-5 h-5" /> : '验证并登录'}
             </button>
@@ -263,7 +269,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, isPasswor
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-dewu-500 hover:bg-dewu-600 text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center shadow-lg shadow-dewu-500/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="auth-primary-action w-full bg-dewu-500 hover:bg-dewu-600 font-bold py-3 rounded-xl transition-all flex items-center justify-center shadow-lg shadow-dewu-500/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? <Loader2 className="animate-spin w-5 h-5" /> : '发送重置邮件'}
             </button>
@@ -295,14 +301,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, isPasswor
           <p className="mt-2 text-[11px] text-slate-400 dark:text-zinc-500">{APP_DISCLAIMER}</p>
         </div>
 
-        <form onSubmit={handleAuth} className="space-y-4">
+        <form onSubmit={handleAuth} noValidate className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
               邮箱
             </label>
             <input
               type="email"
-              required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-dewu-500 text-slate-900 dark:text-white transition-all"
@@ -317,12 +322,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, isPasswor
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
-                required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-dewu-500 text-slate-900 dark:text-white transition-all"
                 placeholder="请输入密码"
-                minLength={6}
+                minLength={isLogin ? undefined : 8}
               />
               <button
                 type="button"
@@ -337,7 +341,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, isPasswor
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-dewu-500 hover:bg-dewu-600 text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center shadow-lg shadow-dewu-500/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="auth-primary-action w-full bg-dewu-500 hover:bg-dewu-600 font-bold py-3 rounded-xl transition-all flex items-center justify-center shadow-lg shadow-dewu-500/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? <Loader2 className="animate-spin w-5 h-5" /> : (isLogin ? '登录' : '注册')}
           </button>
@@ -345,6 +349,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, isPasswor
 
         <div className="mt-6 flex flex-col items-center space-y-3">
           <button
+            type="button"
             onClick={() => setIsLogin(!isLogin)}
             className="text-sm text-slate-500 dark:text-slate-400 hover:text-dewu-500 dark:hover:text-dewu-400 transition-colors"
           >
