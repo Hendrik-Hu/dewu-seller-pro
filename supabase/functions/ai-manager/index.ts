@@ -21,9 +21,15 @@ interface ActionResult {
 }
 
 interface PlanEnvelope {
+  version: 1;
+  planId: string;
   userId: string;
   actions: AgentAction[];
+  issuedAt: string;
+  expiresAt: string;
 }
+
+const PLAN_TTL_MS = 10 * 60 * 1000;
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -110,6 +116,33 @@ const verifyPlanEnvelope = async (secret: string, envelope: PlanEnvelope, token:
     decodeBase64Url(token),
     new TextEncoder().encode(stableStringify(envelope)),
   );
+};
+
+const createPlanToken = async (secret: string, envelope: PlanEnvelope) => {
+  const payload = encodeBase64Url(new TextEncoder().encode(stableStringify(envelope)));
+  const signature = await signPlanEnvelope(secret, envelope);
+  return `${payload}.${signature}`;
+};
+
+const readVerifiedPlanToken = async (secret: string, token: string): Promise<PlanEnvelope | null> => {
+  const [payload, signature, ...extra] = token.split('.');
+  if (!payload || !signature || extra.length > 0) return null;
+
+  try {
+    const envelope = JSON.parse(new TextDecoder().decode(decodeBase64Url(payload))) as PlanEnvelope;
+    if (
+      envelope.version !== 1 ||
+      !envelope.planId ||
+      !envelope.userId ||
+      !Array.isArray(envelope.actions) ||
+      !envelope.issuedAt ||
+      !envelope.expiresAt
+    ) return null;
+
+    return await verifyPlanEnvelope(secret, envelope, signature) ? envelope : null;
+  } catch {
+    return null;
+  }
 };
 
 const findWarehouseName = (input: Record<string, unknown>, context: any) => {
@@ -939,12 +972,18 @@ serve(async (req) => {
       const actionableActions = canonicalActions.filter((action) => action.type !== "answer");
       const failedPreviews = actionPreviews.filter((preview) => preview.status === "failed");
       const executable = actionableActions.length > 0 && actionPreviews.every((preview) => preview.status !== "failed");
-      const planToken = actionableActions.length > 0
-        ? await signPlanEnvelope(signingSecret, {
+      const issuedAt = new Date();
+      const planEnvelope: PlanEnvelope | null = actionableActions.length > 0
+        ? {
+          version: 1,
+          planId: crypto.randomUUID(),
           userId: authData.user.id,
           actions: canonicalActions,
-        })
+          issuedAt: issuedAt.toISOString(),
+          expiresAt: new Date(issuedAt.getTime() + PLAN_TTL_MS).toISOString(),
+        }
         : null;
+      const planToken = planEnvelope ? await createPlanToken(signingSecret, planEnvelope) : null;
 
       return jsonResponse({
         reply: failedPreviews.length > 0
@@ -955,6 +994,7 @@ serve(async (req) => {
         actions: actionPreviews,
         plannedActions: canonicalActions,
         planToken,
+        planExpiresAt: planEnvelope?.expiresAt || null,
         requiresConfirmation: executable,
         executionConfirmed: false,
         dryRun: true,
@@ -965,22 +1005,54 @@ serve(async (req) => {
       });
     }
 
-    const plannedActions = sanitizeAgentActions(Array.isArray(body.plannedActions) ? body.plannedActions : [])
-      .map((action) => hydrateActionWithContext(action, context));
     const planToken = toText(body.planToken);
 
-    if (!plannedActions.length || !planToken) {
+    if (!planToken) {
       return jsonResponse({ error: "缺少待确认的执行计划。" }, 400);
     }
 
-    const verified = await verifyPlanEnvelope(signingSecret, {
-      userId: authData.user.id,
-      actions: plannedActions,
-    }, planToken);
-
-    if (!verified) {
+    const envelope = await readVerifiedPlanToken(signingSecret, planToken);
+    if (!envelope || envelope.userId !== authData.user.id) {
       return jsonResponse({ error: "执行计划校验失败，请重新生成执行计划。" }, 400);
     }
+
+    if (Date.parse(envelope.expiresAt) <= Date.now()) {
+      return jsonResponse({ error: "执行计划已过期，请重新生成后再确认。" }, 410);
+    }
+
+    const plannedActions = sanitizeAgentActions(envelope.actions)
+      .map((action) => hydrateActionWithContext(action, context));
+    if (!plannedActions.length) {
+      return jsonResponse({ error: "执行计划没有可执行动作。" }, 400);
+    }
+
+    const { error: claimError } = await db.from("ai_plan_executions").insert({
+      plan_id: envelope.planId,
+      user_id: authData.user.id,
+      expires_at: envelope.expiresAt,
+      status: "processing",
+    });
+
+    if (claimError?.code === "23505") {
+      const { data: previous } = await db
+        .from("ai_plan_executions")
+        .select("status, result")
+        .eq("plan_id", envelope.planId)
+        .eq("user_id", authData.user.id)
+        .maybeSingle();
+
+      if (previous?.status === "completed" && previous.result) {
+        return jsonResponse({
+          ...previous.result,
+          reply: `该计划已经执行过，本次没有重复修改库存。\n${toText(previous.result.reply)}`,
+          alreadyExecuted: true,
+        });
+      }
+
+      return jsonResponse({ error: "该计划正在执行，请勿重复提交。" }, 409);
+    }
+
+    if (claimError) throw claimError;
 
     const results: ActionResult[] = [];
     for (const action of plannedActions) {
@@ -1011,7 +1083,7 @@ serve(async (req) => {
     if (successful.length) replyParts.push(successful.map((result) => result.summary).join("\n"));
     if (failed.length) replyParts.push(failed.map((result) => result.summary).join("\n"));
 
-    return jsonResponse({
+    const executionResponse = {
       reply: replyParts.filter(Boolean).join("\n"),
       actions: results,
       plannedActions: [],
@@ -1021,7 +1093,21 @@ serve(async (req) => {
       dryRun: false,
       executed: successful.some((result) => result.type !== "answer"),
       executable: failed.length === 0,
-    });
+      alreadyExecuted: false,
+    };
+
+    const { error: completionError } = await db
+      .from("ai_plan_executions")
+      .update({
+        status: "completed",
+        result: executionResponse,
+        completed_at: new Date().toISOString(),
+      })
+      .eq("plan_id", envelope.planId)
+      .eq("user_id", authData.user.id);
+
+    if (completionError) throw completionError;
+    return jsonResponse(executionResponse);
   } catch (error) {
     return jsonResponse({ error: error instanceof Error ? error.message : "Unknown error" }, 500);
   }

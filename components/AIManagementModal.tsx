@@ -33,6 +33,7 @@ interface PendingPlan {
   sourceMessage: string;
   plannedActions: PlannedAction[];
   planToken: string;
+  expiresAt?: string;
 }
 
 interface AiManagerResponse {
@@ -40,6 +41,7 @@ interface AiManagerResponse {
   actions?: ActionSummary[];
   plannedActions?: PlannedAction[];
   planToken?: string | null;
+  planExpiresAt?: string | null;
   requiresConfirmation?: boolean;
   executionConfirmed?: boolean;
   dryRun?: boolean;
@@ -133,6 +135,7 @@ export const AIManagementModal: React.FC<AIManagementModalProps> = ({
           sourceMessage: userMessage,
           plannedActions: data.plannedActions || [],
           planToken: data.planToken,
+          expiresAt: data.planExpiresAt || undefined,
         });
       } else {
         setPendingPlan(null);
@@ -254,7 +257,7 @@ export const AIManagementModal: React.FC<AIManagementModalProps> = ({
         <div className="p-3 bg-white dark:bg-zinc-900 border-t border-slate-100 dark:border-zinc-800">
           {pendingPlan && (
             <div className="mb-2 rounded-xl border border-cyan-200 dark:border-cyan-900/40 bg-cyan-50 dark:bg-cyan-950/20 p-2.5 flex items-center justify-between gap-3">
-              <span className="text-[11px] text-cyan-700 dark:text-cyan-300">计划已锁定，确认后才会真正写入库存和流水。</span>
+              <span className="text-[11px] text-cyan-700 dark:text-cyan-300">计划已锁定，10 分钟内有效且只能执行一次。</span>
               <button
                 onClick={handleConfirmExecute}
                 disabled={isLoading}
