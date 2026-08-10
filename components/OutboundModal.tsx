@@ -1,19 +1,19 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, ArrowUpRight, Search, DollarSign, Calculator, Loader2 } from 'lucide-react';
 import { Preferences } from '@capacitor/preferences';
 import type { FeeScheme, OutboundFeeSelection, Product } from '../types';
 import { normalizeOutboundQuantity, normalizeSalePrice } from '../lib/outboundRules';
-import { formatProductSize, normalizeSku } from '../lib/productNormalization';
+import { formatProductSize } from '../lib/productNormalization';
 import { ProductImage } from './ProductImage';
 import { listFeeSchemes } from '../services/feeSchemes';
 import { calculateFeeQuote } from '../lib/feeCalculations';
 import { calculateTargetUnitPrice, type TargetPricingKind } from '../lib/targetPricing';
 import { getFeeQuotePresentation } from '../lib/feeQuotePresentation';
+import { listActiveSkuVariants, listProducts } from '../services/products';
 
 interface OutboundModalProps {
   isOpen: boolean;
   onClose: () => void;
-  products: Product[];
   userId: string;
   onOutbound: (product: Product, sellingPrice: number, quantity: number, feeSelection: OutboundFeeSelection, operationId: string) => Promise<void> | void;
 }
@@ -21,8 +21,20 @@ interface OutboundModalProps {
 const createOperationId = () => globalThis.crypto?.randomUUID?.() || `outbound-${Date.now()}`;
 const getDraftKey = (userId: string, productId: string) => `outboundDraftV1:${userId}:${productId}`;
 
-export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, products, userId, onOutbound }) => {
+export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, userId, onOutbound }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
+  const [catalogPage, setCatalogPage] = useState(1);
+  const [catalogTotal, setCatalogTotal] = useState(0);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState('');
+  const [catalogRetry, setCatalogRetry] = useState(0);
+  const [sameSkuProducts, setSameSkuProducts] = useState<Product[]>([]);
+  const [variantsLoading, setVariantsLoading] = useState(false);
+  const [variantsError, setVariantsError] = useState('');
+  const latestCatalogRequest = useRef(0);
+  const latestVariantRequest = useRef(0);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [sellingPrice, setSellingPrice] = useState<string>('');
   const [quantity, setQuantity] = useState(1);
@@ -42,6 +54,63 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, p
   const [targetPricingKind, setTargetPricingKind] = useState<TargetPricingKind>('netProfit');
   const [targetPricingValue, setTargetPricingValue] = useState('');
   const [targetPricingRequested, setTargetPricingRequested] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const timer = window.setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm.trim());
+      setCatalogPage(1);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [isOpen, searchTerm]);
+
+  useEffect(() => {
+    if (!isOpen || selectedProduct) return;
+    const requestId = ++latestCatalogRequest.current;
+    setCatalogLoading(true);
+    setCatalogError('');
+    listProducts({
+      userId,
+      status: 'instock',
+      minStock: 1,
+      search: debouncedSearchTerm || undefined,
+      page: catalogPage,
+      pageSize: 20,
+    }).then((result) => {
+      if (requestId !== latestCatalogRequest.current) return;
+      setCatalogProducts(result.products);
+      setCatalogTotal(result.totalCount);
+    }).catch((error) => {
+      if (requestId !== latestCatalogRequest.current) return;
+      setCatalogProducts([]);
+      setCatalogTotal(0);
+      setCatalogError(error instanceof Error ? error.message : '在库商品加载失败');
+    }).finally(() => {
+      if (requestId === latestCatalogRequest.current) setCatalogLoading(false);
+    });
+  }, [catalogPage, catalogRetry, debouncedSearchTerm, isOpen, selectedProduct, userId]);
+
+  useEffect(() => {
+    if (!isOpen || !selectedProduct) {
+      setSameSkuProducts([]);
+      setVariantsError('');
+      setVariantsLoading(false);
+      return;
+    }
+    const requestId = ++latestVariantRequest.current;
+    setVariantsLoading(true);
+    setVariantsError('');
+    listActiveSkuVariants(userId, selectedProduct.sku).then((products) => {
+      if (requestId !== latestVariantRequest.current) return;
+      setSameSkuProducts(products);
+    }).catch((error) => {
+      if (requestId !== latestVariantRequest.current) return;
+      setSameSkuProducts([selectedProduct]);
+      setVariantsError(error instanceof Error ? error.message : '同货号库存加载失败');
+    }).finally(() => {
+      if (requestId === latestVariantRequest.current) setVariantsLoading(false);
+    });
+  }, [isOpen, selectedProduct?.id, selectedProduct?.sku, userId]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -120,6 +189,14 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, p
   const handleClose = () => {
     if (selectedProduct && !submitted) Preferences.remove({ key: getDraftKey(userId, selectedProduct.id) }).catch(() => {});
     setSearchTerm('');
+    setDebouncedSearchTerm('');
+    setCatalogProducts([]);
+    setCatalogPage(1);
+    setCatalogTotal(0);
+    setCatalogError('');
+    setCatalogRetry(0);
+    setSameSkuProducts([]);
+    setVariantsError('');
     setSelectedProduct(null);
     setSellingPrice('');
     setQuantity(1);
@@ -182,47 +259,9 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, p
     }
   };
 
-  // Only show results if user has typed something
-  const hasSearch = searchTerm.trim().length > 0;
-  const normalizedSearch = searchTerm.trim().toLowerCase();
-
-  const availableProducts = hasSearch 
-    ? products
-        .filter(p =>
-          p.stock > 0 &&
-          [
-            p.name,
-            p.sku,
-            p.brand,
-            p.size,
-            p.source,
-            p.warehouse,
-            p.location,
-          ]
-            .filter(Boolean)
-            .some(value => String(value).toLowerCase().includes(normalizedSearch))
-        )
-        .sort((a, b) => {
-          const aSkuExact = a.sku.toLowerCase() === normalizedSearch ? 3 : a.sku.toLowerCase().startsWith(normalizedSearch) ? 2 : a.name.toLowerCase().startsWith(normalizedSearch) ? 1 : 0;
-          const bSkuExact = b.sku.toLowerCase() === normalizedSearch ? 3 : b.sku.toLowerCase().startsWith(normalizedSearch) ? 2 : b.name.toLowerCase().startsWith(normalizedSearch) ? 1 : 0;
-          if (aSkuExact !== bSkuExact) return bSkuExact - aSkuExact;
-          return b.stock - a.stock;
-        })
-    : [];
-
-  const quickPickProducts = !hasSearch
-    ? products
-        .filter((p) => p.stock > 0)
-        .sort((a, b) => b.stock - a.stock)
-        .slice(0, 8)
-    : [];
-
-  // Find other sizes for the same SKU
-  const sameSkuProducts = selectedProduct 
-    ? products
-        .filter(p => normalizeSku(p.sku) === normalizeSku(selectedProduct.sku) && p.stock > 0)
-        .sort((a, b) => parseFloat(a.size) - parseFloat(b.size))
-    : [];
+  const searchPending = searchTerm.trim() !== debouncedSearchTerm;
+  const hasSearch = debouncedSearchTerm.length > 0;
+  const totalCatalogPages = Math.max(1, Math.ceil(catalogTotal / 20));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-[fadeIn_0.2s_ease-out]">
@@ -256,41 +295,28 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, p
             </div>
 
             <div className="overflow-y-auto p-4 space-y-3 min-h-[200px]">
-              {!hasSearch ? (
-                quickPickProducts.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-2 mt-10">
-                    <Search size={32} className="opacity-20" />
-                    <span className="text-xs">请输入货号搜索库存商品</span>
-                  </div>
-                ) : (
-                  <>
-                    <div className="text-[11px] text-slate-400 mb-1">常用在库商品</div>
-                    {quickPickProducts.map(product => (
-                      <div key={product.id} className="flex items-center space-x-3 bg-white p-2 rounded-xl border border-slate-100 shadow-sm animate-[fadeIn_0.2s_ease-out]">
-                        <ProductImage src={product.imageUrl} alt={product.name} className="w-14 h-14 rounded-lg object-cover bg-slate-100" />
-                        <div className="flex-1 min-w-0">
-                          <h4 className="text-xs font-bold text-slate-900 truncate">{product.name}</h4>
-                          <p className="text-[10px] text-slate-400 mt-0.5">{product.sku} · {formatProductSize(product.size)} · 库存 {product.stock}</p>
-                          <p className="text-[10px] text-slate-400 mt-0.5">{product.warehouse || '未设置仓库'} · 成本 ¥{product.price}</p>
-                        </div>
-                        <button
-                          onClick={() => {
-                            selectProduct(product);
-                          }}
-                          className="bg-slate-900 text-white p-2 rounded-lg active:scale-95 transition-transform"
-                        >
-                          <ArrowUpRight size={18} />
-                        </button>
-                      </div>
-                    ))}
-                  </>
-                )
-              ) : availableProducts.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-2 mt-10">
-                  <span className="text-sm font-medium">商品不存在</span>
+              {(catalogLoading || searchPending) && (
+                <div className="flex items-center justify-center gap-2 py-10 text-xs text-slate-400"><Loader2 size={16} className="animate-spin" />正在查询在库商品...</div>
+              )}
+              {!catalogLoading && !searchPending && catalogError && (
+                <div className="flex flex-col items-center gap-3 py-10 text-center">
+                  <p className="text-xs text-rose-500">商品目录加载失败，尚未显示空结果</p>
+                  <button type="button" onClick={() => setCatalogRetry((value) => value + 1)} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white">重试</button>
                 </div>
-              ) : (
-                availableProducts.map(product => (
+              )}
+              {!catalogLoading && !searchPending && !catalogError && catalogProducts.length === 0 && (
+                <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-2 mt-10">
+                  <Search size={32} className="opacity-20" />
+                  <span className="text-sm font-medium">{hasSearch ? '没有匹配的在库商品' : '暂无可出库商品'}</span>
+                </div>
+              )}
+              {!catalogLoading && !searchPending && !catalogError && catalogProducts.length > 0 && (
+                <>
+                  <div className="flex items-center justify-between text-[11px] text-slate-400">
+                    <span>{hasSearch ? `找到 ${catalogTotal} 条库存` : '最近在库商品'}</span>
+                    <span>{catalogPage}/{totalCatalogPages}</span>
+                  </div>
+                  {catalogProducts.map(product => (
                   <div key={product.id} className="flex items-center space-x-3 bg-white p-2 rounded-xl border border-slate-100 shadow-sm animate-[fadeIn_0.2s_ease-out]">
                     <ProductImage src={product.imageUrl} alt={product.name} className="w-14 h-14 rounded-lg object-cover bg-slate-100" />
                     <div className="flex-1 min-w-0">
@@ -308,7 +334,14 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, p
                       <ArrowUpRight size={18} />
                     </button>
                   </div>
-                ))
+                  ))}
+                  {totalCatalogPages > 1 && (
+                    <div className="flex items-center justify-between pt-1">
+                      <button type="button" disabled={catalogPage <= 1} onClick={() => setCatalogPage((page) => Math.max(1, page - 1))} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 disabled:opacity-40">上一页</button>
+                      <button type="button" disabled={catalogPage >= totalCatalogPages} onClick={() => setCatalogPage((page) => Math.min(totalCatalogPages, page + 1))} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 disabled:opacity-40">下一页</button>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </>
@@ -328,9 +361,11 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, p
             </div>
 
             {/* Size Selector */}
-            {sameSkuProducts.length > 1 && (
+            {(variantsLoading || variantsError || sameSkuProducts.length > 1) && (
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-2">切换尺码</label>
+                {variantsLoading && <p className="mb-2 text-[11px] text-slate-400">正在同步同货号库存...</p>}
+                {!variantsLoading && variantsError && <p className="mb-2 text-[11px] text-rose-500">同货号库存同步失败，请返回后重试。</p>}
                 <div className="flex flex-wrap gap-2">
                   {sameSkuProducts.map(p => (
                     <button

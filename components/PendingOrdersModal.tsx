@@ -1,45 +1,81 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { X, Truck, PackageCheck, Search, CheckCircle2, Circle, Check } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { X, Truck, PackageCheck, Search, CheckCircle2, Circle, Check, Loader2 } from 'lucide-react';
 import { Product } from '../types';
 import { formatProductSize } from '../lib/productNormalization';
 import { ProductImage } from './ProductImage';
+import { listProducts } from '../services/products';
 
 interface PendingOrdersModalProps {
   isOpen: boolean;
   onClose: () => void;
-  products: Product[];
+  userId: string;
   onCompletePending: (productIds: string[]) => Promise<void>;
 }
 
-export const PendingOrdersModal: React.FC<PendingOrdersModalProps> = ({ isOpen, onClose, products, onCompletePending }) => {
+export const PendingOrdersModal: React.FC<PendingOrdersModalProps> = ({ isOpen, onClose, userId, onCompletePending }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  const [pendingProducts, setPendingProducts] = useState<Product[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [reloadToken, setReloadToken] = useState(0);
+  const latestRequest = useRef(0);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
     setSearchTerm('');
+    setDebouncedSearchTerm('');
+    setPendingProducts([]);
+    setPage(1);
+    setTotalCount(0);
+    setLoadError('');
+    setReloadToken(0);
     setSelectedIds([]);
     setIsSubmitting(false);
   }, [isOpen]);
 
-  const pendingProducts = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
-    return products.filter((product) => {
-      if (product.status !== 'shipping') return false;
-      if (!q) return true;
-      return [
-        product.name,
-        product.sku,
-        product.brand,
-        product.size,
-        product.warehouse,
-        product.location,
-      ]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(q));
+  useEffect(() => {
+    if (!isOpen) return;
+    const timer = window.setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm.trim());
+      setPage(1);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [isOpen, searchTerm]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const requestId = ++latestRequest.current;
+    setLoading(true);
+    setLoadError('');
+    listProducts({
+      userId,
+      status: 'shipping',
+      minStock: 0,
+      search: debouncedSearchTerm || undefined,
+      page,
+      pageSize: 20,
+    }).then((result) => {
+      if (requestId !== latestRequest.current) return;
+      setPendingProducts(result.products);
+      setTotalCount(result.totalCount);
+      setSelectedIds((current) => current.filter((id) => result.products.some((product) => product.id === id)));
+    }).catch((error) => {
+      if (requestId !== latestRequest.current) return;
+      setPendingProducts([]);
+      setTotalCount(0);
+      setLoadError(error instanceof Error ? error.message : '待发货列表加载失败');
+    }).finally(() => {
+      if (requestId === latestRequest.current) setLoading(false);
     });
-  }, [products, searchTerm]);
+  }, [debouncedSearchTerm, isOpen, page, reloadToken, userId]);
+
+  const searchPending = searchTerm.trim() !== debouncedSearchTerm;
+  const totalPages = Math.max(1, Math.ceil(totalCount / 20));
 
   const allVisibleSelected = pendingProducts.length > 0 && pendingProducts.every((product) => selectedIds.includes(product.id));
 
@@ -74,6 +110,7 @@ export const PendingOrdersModal: React.FC<PendingOrdersModalProps> = ({ isOpen, 
     try {
       await onCompletePending(productIds);
       setSelectedIds((prev) => prev.filter((id) => !productIds.includes(id)));
+      setReloadToken((value) => value + 1);
     } finally {
       setIsSubmitting(false);
     }
@@ -109,21 +146,28 @@ export const PendingOrdersModal: React.FC<PendingOrdersModalProps> = ({ isOpen, 
             />
           </div>
 
-          {pendingProducts.length > 0 && (
+          {!loading && !searchPending && !loadError && pendingProducts.length > 0 && (
             <div className="flex items-center justify-between">
-              <div className="text-[11px] text-slate-500">当前待处理 {pendingProducts.length} 个，已选 {selectedIds.length} 个</div>
+              <div className="text-[11px] text-slate-500">共 {totalCount} 个 · 本页已选 {selectedIds.length} 个</div>
               <button
                 onClick={handleToggleSelectAll}
                 className="text-[11px] font-medium text-dewu-600"
               >
-                {allVisibleSelected ? '取消全选' : '全选当前结果'}
+                {allVisibleSelected ? '取消本页全选' : '全选当前页'}
               </button>
             </div>
           )}
         </div>
         
         <div className="overflow-y-auto p-4 space-y-3 min-h-[200px]">
-          {pendingProducts.length === 0 ? (
+          {(loading || searchPending) ? (
+             <div className="flex items-center justify-center gap-2 py-12 text-xs text-slate-400"><Loader2 size={16} className="animate-spin" />正在同步待发货商品...</div>
+          ) : loadError ? (
+             <div className="flex flex-col items-center gap-3 py-12 text-center">
+               <p className="text-xs text-rose-500">待发货列表加载失败，尚未显示空结果</p>
+               <button type="button" onClick={() => setReloadToken((value) => value + 1)} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white">重试</button>
+             </div>
+          ) : pendingProducts.length === 0 ? (
              <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-2 mt-10">
                <PackageCheck size={48} className="text-slate-200" />
                <span className="text-sm font-medium">暂无待发货订单</span>
@@ -173,9 +217,16 @@ export const PendingOrdersModal: React.FC<PendingOrdersModalProps> = ({ isOpen, 
               </button>
             ))
           )}
+          {!loading && !searchPending && !loadError && totalPages > 1 && (
+            <div className="flex items-center justify-between pt-1">
+              <button type="button" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 disabled:opacity-40">上一页</button>
+              <span className="text-[11px] text-slate-400">{page}/{totalPages}</span>
+              <button type="button" disabled={page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 disabled:opacity-40">下一页</button>
+            </div>
+          )}
         </div>
         
-        {pendingProducts.length > 0 && (
+        {!loading && !searchPending && !loadError && pendingProducts.length > 0 && (
           <div className="p-4 border-t border-slate-100 bg-slate-50">
              <button
                 onClick={() => handleComplete(selectedIds)}

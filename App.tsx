@@ -18,7 +18,7 @@ import { PendingOrdersModal } from './components/PendingOrdersModal';
 import { Tab, Product, Activity, Warehouse, OutboundFeeSelection } from './types';
 import { supabase } from './lib/supabase';
 import { listRecentActivities } from './services/activities';
-import { batchInboundProducts, completePendingProducts, deleteProduct, deleteProducts, listAllProducts, updateProductMetadata } from './services/products';
+import { batchInboundProducts, completePendingProducts, deleteProduct, deleteProducts, updateProductMetadata } from './services/products';
 import { outboundProduct } from './services/outbound';
 import { emptyInventoryAnalytics, getInventoryAnalytics } from './services/analytics';
 import { Loader2 } from 'lucide-react';
@@ -41,10 +41,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   
   // App State
-  const [products, setProducts] = useState<Product[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
-  const [productsLoaded, setProductsLoaded] = useState(false);
-  const [catalogLoading, setCatalogLoading] = useState(false);
   const [analytics, setAnalytics] = useState(emptyInventoryAnalytics);
   const [analyticsReady, setAnalyticsReady] = useState(false);
   const [analyticsError, setAnalyticsError] = useState('');
@@ -262,9 +259,6 @@ export default function App() {
     latestWarehouseRequest.current += 1;
     latestProfileRequest.current += 1;
 
-    setProducts([]);
-    setProductsLoaded(false);
-    setCatalogLoading(false);
     setIsLoading(false);
     setActivities([]);
     setRecentActivitiesReady(false);
@@ -515,7 +509,6 @@ export default function App() {
       alert('请先在库存页点击右上角加号，创建真实仓库后再入库。');
       return;
     }
-    if (!(await ensureProductsLoaded())) return;
     setEditingProduct(null);
     setShowAddModal(true);
   };
@@ -525,7 +518,6 @@ export default function App() {
       alert('仓库信息尚未同步成功，请先重试。');
       return;
     }
-    if (!(await ensureProductsLoaded())) return;
     setShowOutboundModal(true);
   };
 
@@ -534,7 +526,6 @@ export default function App() {
       alert('仓库信息尚未同步成功，请先重试。');
       return;
     }
-    if (!(await ensureProductsLoaded())) return;
     setShowPendingModal(true);
   };
 
@@ -603,11 +594,10 @@ export default function App() {
     const generation = userRequestGeneration.current;
     const requestId = ++latestDataRequest.current;
     if (!analyticsReady) setIsLoading(true);
-    const [analyticsResult, recentResult, orphanResult, productsResult] = await Promise.allSettled([
+    const [analyticsResult, recentResult, orphanResult] = await Promise.allSettled([
       getInventoryAnalytics(),
       listRecentActivities(requestedUserId, 10),
       countOrphanWarehouseProducts(),
-      productsLoaded ? listAllProducts(requestedUserId) : Promise.resolve(null),
     ]);
     if (requestId !== latestDataRequest.current || generation !== userRequestGeneration.current || requestedUserId !== session?.user?.id) return;
 
@@ -628,37 +618,7 @@ export default function App() {
       setRecentActivitiesError(recentResult.reason?.message || '最近动态加载失败');
     }
     if (orphanResult.status === 'fulfilled') setOrphanWarehouseIssueCount(orphanResult.value);
-    if (productsResult.status === 'fulfilled' && productsResult.value) {
-      setProducts(productsResult.value);
-    } else if (productsResult.status === 'rejected') {
-      console.error('Product catalog refresh error:', productsResult.reason);
-      setProductsLoaded(false);
-    }
     setIsLoading(false);
-  };
-
-  const ensureProductsLoaded = async (force = false) => {
-    if (!session?.user?.id) return false;
-    const requestedUserId = session.user.id;
-    const generation = userRequestGeneration.current;
-    if (productsLoaded && !force) return true;
-    setCatalogLoading(true);
-    try {
-      const data = await listAllProducts(requestedUserId);
-      if (generation !== userRequestGeneration.current || requestedUserId !== session?.user?.id) return false;
-      setProducts(data);
-      setProductsLoaded(true);
-      return true;
-    } catch (error: any) {
-      if (generation !== userRequestGeneration.current || requestedUserId !== session?.user?.id) return false;
-      console.error('Product catalog fetch error:', error);
-      alert(`完整商品目录加载失败，尚未打开操作窗口：${error?.message || '请重试'}`);
-      return false;
-    } finally {
-      if (generation === userRequestGeneration.current && requestedUserId === session?.user?.id) {
-        setCatalogLoading(false);
-      }
-    }
   };
 
   // Initial Load
@@ -827,12 +787,6 @@ export default function App() {
               {renderContent()}
             </main>
             <BottomNav currentTab={currentTab} onTabChange={setCurrentTab} />
-            {catalogLoading && (
-              <div className="absolute inset-x-4 bottom-24 z-[65] flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-xs font-medium text-white shadow-xl dark:bg-zinc-800">
-                <Loader2 size={16} className="animate-spin" />正在完整读取商品目录，完成前不会显示空列表
-              </div>
-            )}
-            
             {/* Modals rendered at root level */}
             <AddProductModal 
               isOpen={showAddModal} 
@@ -844,7 +798,6 @@ export default function App() {
               onDelete={handleDeleteProduct}
               initialData={editingProduct}
               warehouses={warehouses}
-              existingProducts={products}
               userId={session.user.id}
             />
             <InventoryAdjustmentModal
@@ -860,14 +813,13 @@ export default function App() {
             <OutboundModal
               isOpen={showOutboundModal}
               onClose={() => setShowOutboundModal(false)}
-              products={products}
               userId={session.user.id}
               onOutbound={handleOutboundProduct}
             />
             <PendingOrdersModal
               isOpen={showPendingModal}
               onClose={() => setShowPendingModal(false)}
-              products={products}
+              userId={session.user.id}
               onCompletePending={handleCompletePendingProducts}
             />
             <RecycleBinModal

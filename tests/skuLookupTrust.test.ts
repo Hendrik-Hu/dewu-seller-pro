@@ -6,9 +6,10 @@ const modalSource = readFileSync(new URL('../components/AddProductModal.tsx', im
 const edgeSource = readFileSync(new URL('../supabase/functions/lookup-sku/index.ts', import.meta.url), 'utf8');
 
 test('inbound SKU suggestions only use the signed-in seller inventory', () => {
-  assert.match(modalSource, /existingProducts/);
-  assert.match(modalSource, /\.slice\(0, 5\)/);
+  assert.match(modalSource, /suggestInventorySkus\(userId, prefix, 5\)/);
+  assert.match(modalSource, /latestSuggestionRequest/);
   assert.match(modalSource, /仅联想当前账号库存中已有的货号/);
+  assert.doesNotMatch(modalSource, /existingProducts/);
   assert.doesNotMatch(modalSource, /functions\.invoke\('lookup-sku'/);
 });
 

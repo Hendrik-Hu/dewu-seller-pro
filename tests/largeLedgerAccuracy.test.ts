@@ -97,7 +97,7 @@ test('UI distinguishes initial loading, stale snapshots, search debounce and acc
   assert.match(app, /useLayoutEffect\(\(\) => \{/);
   assert.match(app, /userRequestGeneration\.current \+= 1/);
   assert.match(app, /latestDataRequest\.current/);
-  assert.match(app, /setProductsLoaded\(false\)/);
+  assert.doesNotMatch(app, /productsLoaded|listAllProducts|ensureProductsLoaded/);
   assert.match(app, /setRecentActivitiesReady\(false\)/);
   assert.match(app, /setCurrentTab\(Tab\.HOME\)/);
 });

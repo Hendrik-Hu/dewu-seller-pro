@@ -5,12 +5,14 @@ import { mergeProductsWithLocalMetadata } from './productMetadata';
 import { isProductImageRef, resolveStorageImageUrl } from './storageImages';
 import { fetchAllPages } from './pagination';
 import { parseInventoryGroupSearchEnvelope } from '../lib/analyticsValidation';
+import { normalizeSku } from '../lib/productNormalization';
 
 export interface ListProductsParams {
   userId: string;
   warehouse?: string;
   status?: Product['status'];
   search?: string;
+  minStock?: number;
   page?: number;
   pageSize?: number;
 }
@@ -20,13 +22,14 @@ export interface ProductPage {
   totalCount: number;
 }
 
-const escapeOrValue = (value: string) => value.replace(/[%(),]/g, '\\$&');
+const escapeOrValue = (value: string) => value.replace(/[\\%(),_]/g, '\\$&');
 
 export const listProducts = async ({
   userId,
   warehouse,
   status,
   search,
+  minStock = 0,
   page = 1,
   pageSize = 50,
 }: ListProductsParams): Promise<ProductPage> => {
@@ -35,7 +38,7 @@ export const listProducts = async ({
     .select('*', { count: 'exact' })
     .eq('user_id', userId)
     .is('deleted_at', null)
-    .gte('stock', 0);
+    .gte('stock', minStock);
 
   if (warehouse) {
     query = query.eq('warehouse', warehouse);
@@ -70,20 +73,35 @@ export const listProducts = async ({
   };
 };
 
-export const listAllProducts = async (userId: string): Promise<Product[]> => {
-  const data = await fetchAllPages((from, to) => supabase
-    .from('products')
-    .select('*', { count: 'exact' })
-    .eq('user_id', userId)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false })
-    .order('id', { ascending: false })
-    .range(from, to), { getKey: (row: any) => String(row.id), label: '商品目录' });
-  const products = await Promise.all(data.map(async (row) => {
-    const product = mapProductFromDb(row);
+const resolveProductRows = async (userId: string, rows: unknown[]): Promise<Product[]> => {
+  const products = await Promise.all(rows.map(async (row) => {
+    if (!row || typeof row !== 'object') throw new Error('商品查询返回了无效数据');
+    const product = mapProductFromDb(row as Record<string, unknown>);
     return { ...product, imageUrl: await resolveStorageImageUrl(product.imageStorageRef || product.imageUrl) };
   }));
   return mergeProductsWithLocalMetadata(userId, products);
+};
+
+export const suggestInventorySkus = async (userId: string, prefix: string, limit = 5): Promise<Product[]> => {
+  const normalizedPrefix = normalizeSku(prefix);
+  if (normalizedPrefix.length < 2) return [];
+  const { data, error } = await supabase.rpc('suggest_inventory_skus', {
+    p_prefix: normalizedPrefix,
+    p_limit: Math.min(Math.max(Math.trunc(limit), 1), 5),
+  });
+  if (error) throw error;
+  if (!Array.isArray(data)) throw new Error('货号联想返回了无效数据');
+  return resolveProductRows(userId, data);
+};
+
+export const listActiveSkuVariants = async (userId: string, sku: string): Promise<Product[]> => {
+  const normalizedSku = normalizeSku(sku);
+  const { data, error } = await supabase.rpc('list_active_sku_variants', {
+    p_sku: normalizedSku,
+  });
+  if (error) throw error;
+  if (!Array.isArray(data)) throw new Error('同货号库存返回了无效数据');
+  return resolveProductRows(userId, data);
 };
 
 export interface ProductGroupSearchPage {

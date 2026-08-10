@@ -1,8 +1,9 @@
-import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Camera, Plus, Save, Trash2, X } from 'lucide-react';
 import { Preferences } from '@capacitor/preferences';
 import { Product, Warehouse } from '../types';
 import { formatProductSize, normalizeBrand, normalizeSize, normalizeSku } from '../lib/productNormalization';
+import { suggestInventorySkus } from '../services/products';
 
 interface AddProductModalProps {
   isOpen: boolean;
@@ -11,7 +12,6 @@ interface AddProductModalProps {
   onDelete?: (productId: string) => void;
   initialData?: Product | null;
   warehouses: Warehouse[];
-  existingProducts: Product[];
   userId: string;
 }
 
@@ -66,16 +66,18 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   onDelete,
   initialData,
   warehouses,
-  existingProducts,
   userId,
 }) => {
   const [productData, setProductData] = useState<Partial<Product>>(createEmptyDraft(warehouses));
   const [additionalVariants, setAdditionalVariants] = useState<AdditionalVariant[]>([]);
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
   const [showSkuSuggestions, setShowSkuSuggestions] = useState(false);
+  const [skuSuggestions, setSkuSuggestions] = useState<Product[]>([]);
+  const [skuSuggestionsLoading, setSkuSuggestionsLoading] = useState(false);
+  const [skuSuggestionsError, setSkuSuggestionsError] = useState('');
+  const latestSuggestionRequest = useRef(0);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const skuInputRef = useRef<HTMLInputElement>(null);
-  const deferredSku = useDeferredValue((productData.sku || '').trim().toUpperCase());
 
   useEffect(() => {
     if (!isOpen) return;
@@ -165,20 +167,43 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
     };
   }, [additionalVariants, initialData, isOpen, productData, userId]);
 
-  const skuSuggestions = useMemo(() => {
-    if (!deferredSku) return [];
+  useEffect(() => {
+    if (!isOpen || initialData) {
+      latestSuggestionRequest.current += 1;
+      setSkuSuggestions([]);
+      setSkuSuggestionsLoading(false);
+      setSkuSuggestionsError('');
+      return;
+    }
+    const prefix = normalizeSku(productData.sku || '');
+    const requestId = ++latestSuggestionRequest.current;
+    if (prefix.length < 2) {
+      setSkuSuggestions([]);
+      setSkuSuggestionsLoading(false);
+      setSkuSuggestionsError('');
+      return;
+    }
 
-    const uniqueProducts = new Map<string, Product>();
-    existingProducts.forEach((product) => {
-      const key = product.sku.toUpperCase();
-      if (!key.startsWith(deferredSku)) return;
-      if (!uniqueProducts.has(key)) {
-        uniqueProducts.set(key, product);
-      }
-    });
+    setSkuSuggestionsLoading(true);
+    setSkuSuggestionsError('');
+    const timer = window.setTimeout(() => {
+      suggestInventorySkus(userId, prefix, 5)
+        .then((products) => {
+          if (requestId !== latestSuggestionRequest.current) return;
+          setSkuSuggestions(products);
+        })
+        .catch((error) => {
+          if (requestId !== latestSuggestionRequest.current) return;
+          setSkuSuggestions([]);
+          setSkuSuggestionsError(error instanceof Error ? error.message : '货号联想加载失败');
+        })
+        .finally(() => {
+          if (requestId === latestSuggestionRequest.current) setSkuSuggestionsLoading(false);
+        });
+    }, 250);
 
-    return Array.from(uniqueProducts.values()).slice(0, 5);
-  }, [deferredSku, existingProducts]);
+    return () => window.clearTimeout(timer);
+  }, [initialData, isOpen, productData.sku, userId]);
 
   const previewImage = productData.imageDataUrl || productData.imageUrl;
 
@@ -450,8 +475,10 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
               }}
             />
             <div className="mt-1 text-[11px] text-slate-400">输入后仅联想当前账号库存中已有的货号，最多显示 5 条。</div>
-            {showSkuSuggestions && skuSuggestions.length > 0 && (
+            {showSkuSuggestions && (skuSuggestionsLoading || skuSuggestionsError || skuSuggestions.length > 0) && (
               <div className="absolute z-10 mt-2 w-full rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden">
+                {skuSuggestionsLoading && <div className="px-3 py-2.5 text-[11px] text-slate-400">正在查询已有货号...</div>}
+                {!skuSuggestionsLoading && skuSuggestionsError && <div className="px-3 py-2.5 text-[11px] text-rose-500">联想失败，可继续手动填写</div>}
                 {skuSuggestions.map((product) => (
                   <button
                     type="button"
