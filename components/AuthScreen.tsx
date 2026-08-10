@@ -15,10 +15,9 @@ interface AuthScreenProps {
 export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, isPasswordRecovery = false, onRecoveryComplete }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [isResetPassword, setIsResetPassword] = useState(false);
-  const [isVerifying, setIsVerifying] = useState(false);
+  const [isAwaitingConfirmation, setIsAwaitingConfirmation] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -40,31 +39,18 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, isPasswor
     return message;
   };
 
-  const handleVerify = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!otp) return alert('请输入验证码');
-    
+  const handleResendConfirmation = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.auth.verifyOtp({
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
         email,
-        token: otp,
-        type: 'signup'
+        options: { emailRedirectTo: PUBLIC_LINKS.emailConfirmation },
       });
-
       if (error) throw error;
-
-      if (data.session) {
-        alert('验证成功！');
-        onAuthSuccess();
-      } else {
-        alert('验证完成，请登录');
-        setIsVerifying(false);
-        setIsLogin(true);
-      }
+      alert('确认邮件已重新发送，请检查收件箱和垃圾邮件。');
     } catch (error: any) {
-      console.error('Verify error:', error);
-      alert(`验证失败: ${getAuthErrorMessage(error, '验证码错误或已过期')}`);
+      alert(getAuthErrorMessage(error, '确认邮件发送失败，请稍后重试'));
     } finally {
       setLoading(false);
     }
@@ -156,16 +142,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, isPasswor
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
+          options: { emailRedirectTo: PUBLIC_LINKS.emailConfirmation },
         });
         if (error) throw error;
         
         // Check if email confirmation is required (production mode)
         if (data.user && !data.session) {
-           alert('注册成功！\n\n验证码已发送至您的邮箱，请输入验证码完成注册。');
-           setIsVerifying(true);
+           setIsAwaitingConfirmation(true);
         } else {
-           alert('注册成功！请直接登录。');
-           setIsLogin(true);
+           onAuthSuccess();
         }
         
         setLoading(false);
@@ -176,7 +161,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, isPasswor
       console.error('Auth error:', error);
       if (error.message.includes('Email not confirmed')) {
         alert('登录失败：您的邮箱尚未验证。\n\n请检查您的邮箱验证码。');
-        setIsVerifying(true); // Allow them to enter OTP if they try to login unverified
+        setIsAwaitingConfirmation(true);
       } else if (error.message.includes('Invalid login credentials')) {
         alert('登录失败：账号或密码错误。');
       } else {
@@ -187,47 +172,43 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess, isPasswor
     }
   };
 
-  if (isVerifying) {
+  if (isAwaitingConfirmation) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 dark:bg-black p-6">
         <div className="w-full max-w-sm bg-white dark:bg-zinc-900 rounded-2xl shadow-xl p-8 border border-slate-100 dark:border-zinc-800">
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
-              请输入验证码
+              请确认你的邮箱
             </h1>
             <p className="text-slate-500 dark:text-slate-400 text-sm">
-              已发送 6 位数验证码至 {email}
+              确认链接已发送至 {email}。点击邮件中的链接后会回到卖家库存助手。
             </p>
           </div>
 
-          <form onSubmit={handleVerify} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                验证码
-              </label>
-              <input
-                type="text"
-                required
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                className="w-full px-4 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-dewu-500 text-slate-900 dark:text-white transition-all text-center tracking-widest text-lg"
-                placeholder="000000"
-                maxLength={6}
-              />
-            </div>
-
+          <div className="space-y-3">
             <button
-              type="submit"
-              disabled={loading}
-              className="auth-primary-action w-full bg-dewu-500 hover:bg-dewu-600 font-bold py-3 rounded-xl transition-all flex items-center justify-center shadow-lg shadow-dewu-500/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              type="button"
+              onClick={() => {
+                setIsAwaitingConfirmation(false);
+                setIsLogin(true);
+              }}
+              className="auth-primary-action w-full bg-dewu-500 hover:bg-dewu-600 font-bold py-3 rounded-xl transition-all flex items-center justify-center shadow-lg shadow-dewu-500/30 active:scale-95"
             >
-              {loading ? <Loader2 className="animate-spin w-5 h-5" /> : '验证并登录'}
+              已完成验证，去登录
             </button>
-          </form>
+            <button
+              type="button"
+              onClick={handleResendConfirmation}
+              disabled={loading}
+              className="w-full rounded-xl border border-slate-200 py-3 text-sm font-semibold text-slate-600 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300"
+            >
+              {loading ? <Loader2 className="mx-auto h-5 w-5 animate-spin" /> : '重新发送确认邮件'}
+            </button>
+          </div>
 
           <div className="mt-6 text-center">
             <button
-              onClick={() => setIsVerifying(false)}
+              onClick={() => setIsAwaitingConfirmation(false)}
               className="text-sm text-slate-500 dark:text-slate-400 hover:text-dewu-500 dark:hover:text-dewu-400 transition-colors"
             >
               返回登录

@@ -8,6 +8,10 @@ const migration = readFileSync(
 );
 const appSource = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
 const modalSource = readFileSync(new URL('../components/AddProductModal.tsx', import.meta.url), 'utf8');
+const firstWarehouseSource = readFileSync(new URL('../components/FirstWarehouseModal.tsx', import.meta.url), 'utf8');
+const homeSource = readFileSync(new URL('../components/Home.tsx', import.meta.url), 'utf8');
+const firstWarehousePersistenceSource = readFileSync(new URL('../services/firstWarehouseCreation.ts', import.meta.url), 'utf8');
+const accountSecuritySource = readFileSync(new URL('../components/AccountSecurityModal.tsx', import.meta.url), 'utf8');
 const serviceSource = readFileSync(new URL('../services/warehouses.ts', import.meta.url), 'utf8');
 const dataHealthSource = readFileSync(new URL('../services/dataHealth.ts', import.meta.url), 'utf8');
 const orphanCountMigration = readFileSync(
@@ -42,8 +46,36 @@ test('new accounts and inbound drafts never fabricate example warehouses', () =>
   for (const source of [appSource, modalSource]) {
     assert.doesNotMatch(source, /杭州一号仓|上海浦东仓|北京大兴仓|广州白云仓/);
   }
-  assert.match(appSource, /请先在库存页点击右上角加号/);
+  assert.match(appSource, /setShowFirstWarehouseModal\(true\)/);
   assert.match(modalSource, /请先关闭窗口，在库存页点击右上角加号创建仓库/);
+});
+
+test('confirmed empty accounts can create the first warehouse without leaving inbound', () => {
+  assert.match(homeSource, /warehousesReady && !warehousesError && warehouses\.length === 0/);
+  assert.match(homeSource, /创建第一个仓库/);
+  assert.match(firstWarehouseSource, /创建并继续入库/);
+  assert.match(appSource, /setShowFirstWarehouseModal\(false\)[\s\S]*setShowAddModal\(true\)/);
+});
+
+test('unknown first warehouse responses must be verified before another create', () => {
+  assert.match(appSource, /WAREHOUSE_CREATE_UNKNOWN/);
+  assert.match(appSource, /verifyWarehouseByName/);
+  assert.match(firstWarehouseSource, /resultUnknown/);
+  assert.match(firstWarehouseSource, /核对创建结果/);
+  assert.match(firstWarehouseSource, /不要重复创建/);
+  assert.match(firstWarehouseSource, /savePendingFirstWarehouseCreation/);
+  assert.match(firstWarehouseSource, /loadPendingFirstWarehouseCreation/);
+  assert.match(firstWarehousePersistenceSource, /firstWarehouseCreationPending:\$\{userId\}/);
+  assert.doesNotMatch(firstWarehousePersistenceSource, /password|token|email/i);
+  assert.match(firstWarehouseSource, /disabled=\{busy \|\| hydrating \|\| resultUnknown\}/);
+  assert.match(accountSecuritySource, /clearPendingFirstWarehouseCreation\(deletingUserId\)/);
+});
+
+test('first warehouse controls have visible and accessible mobile labels', () => {
+  assert.match(firstWarehouseSource, /aria-labelledby="first-warehouse-title"/);
+  assert.match(firstWarehouseSource, /aria-label=\{resultUnknown \? '创建结果待核对，暂时不能关闭' : '关闭创建仓库'\}/);
+  assert.match(homeSource, /aria-label="创建第一个仓库并继续入库"/);
+  assert.match(firstWarehouseSource, /maxLength=\{60\}/);
 });
 
 test('ledger restore validates normalized warehouse names before delegating to the definer core', () => {

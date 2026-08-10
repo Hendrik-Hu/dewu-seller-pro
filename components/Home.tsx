@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingBag, Truck, Package, ArrowDownRight, ArrowUpRight, ChevronRight, Clock, Sparkles, UserRound, RefreshCw, Loader2 } from 'lucide-react';
+import { ShoppingBag, Truck, Package, ArrowDownRight, ArrowUpRight, ChevronRight, Clock, Sparkles, UserRound, RefreshCw, Loader2, Warehouse as WarehouseIcon, Plus } from 'lucide-react';
 import { Activity, Warehouse } from '../types';
 import { InventoryStatsModal } from './InventoryStatsModal';
 import { AIManagementModal } from './AIManagementModal';
@@ -13,6 +13,8 @@ import type { InventoryAnalytics } from '../lib/inventoryMetrics';
 interface HomeProps {
   userId: string;
   warehouses: Warehouse[];
+  warehousesReady: boolean;
+  warehousesError?: string;
   username: string;
   avatarUrl: string;
   onInboundClick: () => void;
@@ -30,12 +32,16 @@ interface HomeProps {
   recentActivitiesReady: boolean;
   recentActivitiesError?: string;
   onRetryData: () => void;
+  onRetryWarehouses: () => void;
+  onStartFirstWarehouse: () => void;
   onAIManageExecuted?: () => void;
 }
 
 export const Home: React.FC<HomeProps> = ({ 
   userId,
   warehouses,
+  warehousesReady,
+  warehousesError,
   username, 
   avatarUrl,
   onInboundClick, 
@@ -53,6 +59,8 @@ export const Home: React.FC<HomeProps> = ({
   recentActivitiesReady,
   recentActivitiesError,
   onRetryData,
+  onRetryWarehouses,
+  onStartFirstWarehouse,
   onAIManageExecuted
 }) => {
   // Inventory Modal State
@@ -95,6 +103,37 @@ export const Home: React.FC<HomeProps> = ({
           <span>{analyticsReady ? '数据刷新失败，当前显示上次成功结果，可能已过期。' : '库存与经营摘要同步失败，请重试。'}</span>
           <button type="button" onClick={onRetryData} className="flex shrink-0 items-center gap-1 font-semibold"><RefreshCw size={12} />重试</button>
         </div>
+      )}
+
+      {!warehousesReady && (
+        <div className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 text-[11px] ${warehousesError ? 'border-rose-200 bg-rose-50 text-rose-600 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-300' : 'border-slate-200 bg-white text-slate-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400'}`}>
+          <span className="flex items-center gap-2">{!warehousesError && <Loader2 size={13} className="animate-spin" />}{warehousesError ? '仓库同步失败，尚未把账号判断为空。' : '正在确认你的仓库信息...'}</span>
+          {warehousesError && <button type="button" onClick={onRetryWarehouses} className="shrink-0 font-semibold">重试</button>}
+        </div>
+      )}
+
+      {warehousesReady && warehousesError && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
+          <span>仓库刷新失败，当前结果可能已过期。</span>
+          <button type="button" onClick={onRetryWarehouses} className="shrink-0 font-semibold">重新同步</button>
+        </div>
+      )}
+
+      {warehousesReady && !warehousesError && warehouses.length === 0 && (
+        <section className="rounded-2xl border border-dewu-100 bg-white p-4 shadow-sm dark:border-dewu-900/40 dark:bg-zinc-900" aria-labelledby="first-use-title">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-dewu-50 text-dewu-600 dark:bg-dewu-950/40 dark:text-dewu-300">
+              <WarehouseIcon size={20} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 id="first-use-title" className="text-sm font-bold text-slate-900 dark:text-white">先建立你的真实库存起点</h2>
+              <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-zinc-400">创建第一个主仓后即可入库。这里不会放入演示商品，首页数字只来自你的真实账本。</p>
+            </div>
+          </div>
+          <button type="button" onClick={onStartFirstWarehouse} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 py-2.5 text-xs font-bold text-white dark:bg-white dark:text-black" aria-label="创建第一个仓库并继续入库">
+            <Plus size={15} />创建第一个仓库
+          </button>
+        </section>
       )}
 
       {/* Quick Stats Cards */}

@@ -13,6 +13,7 @@ import { BackupRestoreModal } from './components/BackupRestoreModal';
 import { FeeSchemeModal } from './components/FeeSchemeModal';
 import { AddProductModal } from './components/AddProductModal';
 import { InventoryAdjustmentModal } from './components/InventoryAdjustmentModal';
+import { FirstWarehouseModal } from './components/FirstWarehouseModal';
 import { OutboundModal } from './components/OutboundModal';
 import { TransitInventoryModal } from './components/PendingOrdersModal';
 import { Tab, Product, Activity, Warehouse, OutboundFeeSelection } from './types';
@@ -26,6 +27,7 @@ import { Session } from '@supabase/supabase-js';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { parseRecoveryUrl } from './lib/authRecovery';
+import { parseConfirmationUrl } from './lib/authConfirmation';
 import { SystemBars } from './lib/systemBars';
 import { normalizeProduct } from './lib/productNormalization';
 import {
@@ -37,6 +39,7 @@ import {
 } from './services/storageImages';
 import { createWarehouse, deleteWarehouse, listWarehouses, renameWarehouse, setDefaultWarehouse } from './services/warehouses';
 import { countOrphanWarehouseProducts } from './services/dataHealth';
+import { clearPendingFirstWarehouseCreation } from './services/firstWarehouseCreation';
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -90,14 +93,28 @@ export default function App() {
     let removed = false;
     const handleRecoveryUrl = async (url: string) => {
       const payload = parseRecoveryUrl(url);
-      if (!payload) return;
-      const result = payload.code
-        ? await supabase.auth.exchangeCodeForSession(payload.code)
-        : await supabase.auth.setSession({ access_token: payload.accessToken!, refresh_token: payload.refreshToken! });
-      if (!result.error && !removed) {
-        setSession(result.data.session);
-        setIsPasswordRecovery(true);
-        setIsAuthReady(true);
+      if (payload) {
+        const result = payload.code
+          ? await supabase.auth.exchangeCodeForSession(payload.code)
+          : await supabase.auth.setSession({ access_token: payload.accessToken!, refresh_token: payload.refreshToken! });
+        if (!result.error && !removed) {
+          setSession(result.data.session);
+          setIsPasswordRecovery(true);
+          setIsAuthReady(true);
+        }
+        return;
+      }
+
+      const confirmation = parseConfirmationUrl(url);
+      if (confirmation) {
+        const result = confirmation.code
+          ? await supabase.auth.exchangeCodeForSession(confirmation.code)
+          : await supabase.auth.setSession({ access_token: confirmation.accessToken!, refresh_token: confirmation.refreshToken! });
+        if (!result.error && !removed) {
+          setSession(result.data.session);
+          setIsPasswordRecovery(false);
+          setIsAuthReady(true);
+        }
       }
     };
 
@@ -249,6 +266,7 @@ export default function App() {
   const [showBackupRestore, setShowBackupRestore] = useState(false);
   const [showFeeSchemes, setShowFeeSchemes] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
+  const [showFirstWarehouseModal, setShowFirstWarehouseModal] = useState(false);
   const [transferProductTarget, setTransferProductTarget] = useState<Product | null>(null);
   
   // Warehouse State
@@ -290,6 +308,7 @@ export default function App() {
     setShowBackupRestore(false);
     setShowFeeSchemes(false);
     setShowTransferModal(false);
+    setShowFirstWarehouseModal(false);
     setCurrentTab(Tab.HOME);
     setRefreshTrigger(0);
   }, [session?.user?.id]);
@@ -342,6 +361,9 @@ export default function App() {
       setWarehouses(nextWarehouses);
       setWarehousesReady(true);
       setWarehousesError('');
+      if (nextWarehouses.length > 0) {
+        void clearPendingFirstWarehouseCreation(requestedUserId).catch(() => {});
+      }
       return true;
     } catch (error) {
       console.error('Error fetching warehouses:', error);
@@ -515,10 +537,42 @@ export default function App() {
     }
   };
 
+  const applyVerifiedWarehouses = (nextWarehouses: Warehouse[]) => {
+    setWarehouses(nextWarehouses);
+    setWarehousesReady(true);
+    setWarehousesError('');
+  };
+
+  const verifyWarehouseByName = async (name: string): Promise<Warehouse | null> => {
+    if (!session?.user?.id) throw new Error('登录状态已失效，请重新登录');
+    const requestedUserId = session.user.id;
+    const generation = userRequestGeneration.current;
+    const nextWarehouses = await listWarehouses(requestedUserId);
+    if (generation !== userRequestGeneration.current || requestedUserId !== session?.user?.id) {
+      throw new Error('账号已切换，请在当前账号重新操作');
+    }
+    applyVerifiedWarehouses(nextWarehouses);
+    const normalizedName = name.trim().toLocaleLowerCase('zh-CN');
+    return nextWarehouses.find((warehouse) => warehouse.name.trim().toLocaleLowerCase('zh-CN') === normalizedName) || null;
+  };
+
   const handleAddWarehouse = async (name: string) => {
     const trimmedName = name.trim();
     if (!trimmedName || !session?.user?.id) throw new Error('请输入仓库名称');
-    const created = await createWarehouse(trimmedName);
+    let created: Warehouse;
+    try {
+      created = await createWarehouse(trimmedName);
+    } catch (createError) {
+      try {
+        const verified = await verifyWarehouseByName(trimmedName);
+        if (verified) return verified;
+      } catch {
+        const unknownError = new Error('创建结果暂时无法核对，请先恢复网络后核对，不要重复创建') as Error & { code: string };
+        unknownError.code = 'WAREHOUSE_CREATE_UNKNOWN';
+        throw unknownError;
+      }
+      throw createError;
+    }
     setWarehouses((current) => current.some((warehouse) => warehouse.id === created.id) ? current : [...current, created]);
     setWarehousesReady(true);
     const synced = await fetchWarehouses();
@@ -546,9 +600,12 @@ export default function App() {
       alert('仓库信息尚未同步成功，请先重试，避免重复创建仓库。');
       return;
     }
+    if (warehouses.length === 0 && warehousesError) {
+      alert('仓库列表刷新失败，暂时无法确认账号仍为空。请先重新同步，避免重复创建。');
+      return;
+    }
     if (warehouses.length === 0) {
-      setCurrentTab(Tab.PRODUCTS);
-      alert('请先在库存页点击右上角加号，创建真实仓库后再入库。');
+      setShowFirstWarehouseModal(true);
       return;
     }
     setEditingProduct(null);
@@ -680,6 +737,8 @@ export default function App() {
           <Home 
             userId={session.user.id}
             warehouses={warehouses}
+            warehousesReady={warehousesReady}
+            warehousesError={warehousesError}
             username={userProfile.name}
             avatarUrl={userProfile.avatar}
             onInboundClick={handleInboundEntry}
@@ -696,6 +755,8 @@ export default function App() {
             recentActivitiesReady={recentActivitiesReady}
             recentActivitiesError={recentActivitiesError}
             onRetryData={fetchData}
+            onRetryWarehouses={fetchWarehouses}
+            onStartFirstWarehouse={() => setShowFirstWarehouseModal(true)}
             onAIManageExecuted={() => {
               fetchData();
               setRefreshTrigger(prev => prev + 1);
@@ -766,6 +827,8 @@ export default function App() {
         return <Home 
             userId={session.user.id}
             warehouses={warehouses}
+            warehousesReady={warehousesReady}
+            warehousesError={warehousesError}
             username={userProfile.name}
             avatarUrl={userProfile.avatar}
             onInboundClick={handleInboundEntry}
@@ -782,6 +845,8 @@ export default function App() {
             recentActivitiesReady={recentActivitiesReady}
             recentActivitiesError={recentActivitiesError}
             onRetryData={fetchData}
+            onRetryWarehouses={fetchWarehouses}
+            onStartFirstWarehouse={() => setShowFirstWarehouseModal(true)}
             onAIManageExecuted={() => {
               fetchData();
               setRefreshTrigger(prev => prev + 1);
@@ -826,6 +891,18 @@ export default function App() {
               initialData={editingProduct}
               warehouses={warehouses}
               userId={session.user.id}
+            />
+            <FirstWarehouseModal
+              isOpen={showFirstWarehouseModal}
+              userId={session.user.id}
+              onClose={() => setShowFirstWarehouseModal(false)}
+              onCreate={handleAddWarehouse}
+              onVerify={verifyWarehouseByName}
+              onCreated={() => {
+                setShowFirstWarehouseModal(false);
+                setEditingProduct(null);
+                setShowAddModal(true);
+              }}
             />
             <InventoryAdjustmentModal
               isOpen={Boolean(adjustingProduct)}

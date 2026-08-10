@@ -12,6 +12,7 @@ export const PUBLIC_LINKS = {
   privacy: `${publicSiteBase}/privacy.html`,
   accountDeletion: `${publicSiteBase}/account-deletion.html`,
   passwordRecovery: `${publicSiteBase}/auth/recovery`,
+  emailConfirmation: `${publicSiteBase}/auth/confirm`,
   support: 'https://github.com/Hendrik-Hu/dewu-seller-pro/issues',
 } as const;
 

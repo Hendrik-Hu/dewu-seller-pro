@@ -7,8 +7,8 @@ android {
         applicationId "com.hendrikhu.sellerinventory"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 18
-        versionName "0.16.0"
+        versionCode 19
+        versionName "0.17.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders = [recoveryHost: System.getenv("SELLER_INVENTORY_RECOVERY_HOST") ?: "invalid.example"]
         aaptOptions {

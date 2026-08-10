@@ -5,6 +5,7 @@ import { openExternalUrl, PUBLIC_LINKS } from '../lib/publicLinks';
 import { getAccountDeletionErrorMessage, validateNewPassword } from '../lib/accountSecurity';
 import { deleteAllProductPhotoDraftData } from '../services/productPhotoDrafts';
 import { clearProductImageCleanupQueue } from '../services/storageImages';
+import { clearPendingFirstWarehouseCreation } from '../services/firstWarehouseCreation';
 
 interface AccountSecurityModalProps {
   isOpen: boolean;
@@ -176,6 +177,7 @@ export const AccountSecurityModal: React.FC<AccountSecurityModalProps> = ({ isOp
         await Promise.allSettled([
           deleteAllProductPhotoDraftData(deletingUserId),
           clearProductImageCleanupQueue(deletingUserId),
+          clearPendingFirstWarehouseCreation(deletingUserId),
         ]);
       }
       await supabase.auth.signOut({ scope: 'local' });
