@@ -30,6 +30,10 @@ test('deferred failures stay local, support retry and ignore late unmounted load
   assert.match(deferred, /let active = true/);
   assert.match(deferred, /if \(active\) setComponent/);
   assert.match(deferred, /现有数据没有被清空/);
+  assert.match(deferred, /recoverFromDynamicImportFailure/);
+  assert.match(deferred, /应用文件已更新或暂时不可用/);
+  assert.match(deferred, /当前设备处于离线状态/);
+  assert.match(deferred, /requiresAppReload \? '刷新应用' : '重新加载'/);
   assert.match(deferred, /重新加载/);
   assert.match(deferred, /aria-busy/);
 });

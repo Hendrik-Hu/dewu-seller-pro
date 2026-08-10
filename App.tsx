@@ -107,6 +107,7 @@ export default function App() {
   const latestDataRequest = useRef(0);
   const latestWarehouseRequest = useRef(0);
   const latestProfileRequest = useRef(0);
+  const cleanupStartedForUser = useRef<string | null>(null);
 
   // Theme State
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -428,12 +429,14 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (session) {
+    if (session && cleanupStartedForUser.current !== session.user.id) {
+      cleanupStartedForUser.current = session.user.id;
       fetchWarehouses();
       processProductImageCleanupQueue(session.user.id).catch((error) => {
         console.warn('Deferred product image cleanup remains queued.', error);
       });
     }
+    if (!session) cleanupStartedForUser.current = null;
   }, [session]);
 
   const handleSetDefaultWarehouse = async (id: string) => {

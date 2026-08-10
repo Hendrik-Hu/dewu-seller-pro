@@ -74,6 +74,8 @@ test('uploads are immutable and cleanup fails closed around live product and act
   assert.match(storage, /if \(productsResult\.error\) throw/);
   assert.match(storage, /if \(activitiesResult\.error\) throw/);
   assert.match(app, /enqueueProductImageCleanup/);
+  assert.match(app, /cleanupStartedForUser\.current !== session\.user\.id/);
+  assert.match(app, /cleanupStartedForUser\.current = session\.user\.id/);
   assert.doesNotMatch(app, /removeProductImageRef\(/);
   assert.doesNotMatch(app, /upload\(path, file, \{ upsert: true \}\)/);
   assert.match(migration, /values \('product-images', 'product-images', false\)/);
