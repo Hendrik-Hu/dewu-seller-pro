@@ -2,7 +2,7 @@ import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from 'r
 import { Camera, Plus, Save, Trash2, X } from 'lucide-react';
 import { Preferences } from '@capacitor/preferences';
 import { Product, Warehouse } from '../types';
-import { normalizeBrand, normalizeSize, normalizeSku } from '../lib/productNormalization';
+import { formatProductSize, normalizeBrand, normalizeSize, normalizeSku } from '../lib/productNormalization';
 
 interface AddProductModalProps {
   isOpen: boolean;
@@ -192,6 +192,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       name: productData.name || product.name,
       brand: productData.brand || product.brand,
       imageUrl: productData.imageDataUrl ? productData.imageUrl : (productData.imageUrl || product.imageUrl),
+      imageStorageRef: productData.imageDataUrl ? productData.imageStorageRef : (productData.imageStorageRef || product.imageStorageRef),
     });
     setShowSkuSuggestions(false);
   };
@@ -206,6 +207,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       updateProductData({
         imageDataUrl: dataUrl,
         imageUrl: '',
+        imageStorageRef: undefined,
       });
     } catch (error) {
       console.error('Failed to read photo', error);
@@ -216,6 +218,36 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   };
 
   const handleSave = async () => {
+    if (initialData) {
+      const name = String(productData.name || '').trim();
+      const brand = String(productData.brand || '').trim();
+      if (!name) {
+        alert('请先填写必填项：商品名称');
+        return;
+      }
+      if (!brand) {
+        alert('请先填写必填项：品牌');
+        return;
+      }
+      const editedProduct: Product = {
+        ...initialData,
+        name,
+        brand: normalizeBrand(brand),
+        location: String(productData.location || '').trim(),
+        source: String(productData.source || '').trim(),
+        imageUrl: productData.imageUrl || initialData.imageUrl || '',
+        imageStorageRef: productData.imageStorageRef || initialData.imageStorageRef,
+        imageDataUrl: productData.imageDataUrl || '',
+        imageFile: selectedImageFile || undefined,
+      };
+      try {
+        await onSave(editedProduct);
+      } catch (error) {
+        console.error('Metadata save operation failed', error);
+      }
+      return;
+    }
+
     if (warehouses.length === 0) {
       alert('请先关闭窗口，在库存页点击右上角加号创建仓库。');
       return;
@@ -290,6 +322,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       price: cost,
       stock,
       imageUrl: productData.imageUrl || '',
+      imageStorageRef: productData.imageStorageRef,
       imageDataUrl: productData.imageDataUrl || '',
       imageFile: selectedImageFile || undefined,
       status: productData.status || 'instock',
@@ -331,7 +364,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden max-h-[88vh] flex flex-col">
         <div className="flex justify-between items-center p-4 border-b border-slate-100">
           <div>
-            <h2 className="text-lg font-bold text-slate-900">{initialData ? '编辑库存商品' : '新增库存商品'}</h2>
+            <h2 className="text-lg font-bold text-slate-900">{initialData ? '编辑商品资料' : '新增库存商品'}</h2>
             {!initialData && (
               <p className="text-[11px] text-slate-400 mt-0.5">草稿会在切换 App 或离开页面时自动保存</p>
             )}
@@ -355,7 +388,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-xs font-semibold text-slate-700">商品主图 <span className="text-slate-400 font-normal">选填</span></div>
-                <div className="text-[11px] text-slate-400 mt-1">可直接拍照。若同货号已存在，最后一次拍摄的图片会覆盖为该商品主图。</div>
+                <div className="text-[11px] text-slate-400 mt-1">{initialData ? '名称、品牌和主图同步到同货号全部尺码；库位与来源仅修改当前仓库变体。' : '可直接拍照。若同货号已存在，最后一次拍摄的图片会覆盖为该商品主图。'}</div>
               </div>
               <button
                 type="button"
@@ -387,7 +420,19 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             )}
           </div>
 
-          <div className="relative">
+          {initialData ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="text-xs font-semibold text-slate-700">库存变体身份</div>
+              <div className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
+                <div><div className="text-slate-400">货号</div><div className="mt-0.5 truncate font-medium text-slate-700">{initialData.sku}</div></div>
+                <div><div className="text-slate-400">尺码</div><div className="mt-0.5 font-medium text-slate-700">{formatProductSize(initialData.size)}</div></div>
+                <div><div className="text-slate-400">仓库</div><div className="mt-0.5 truncate font-medium text-slate-700">{initialData.warehouse || '—'}</div></div>
+                <div><div className="text-slate-400">库存</div><div className="mt-0.5 font-medium text-slate-700">{initialData.stock}</div></div>
+                <div><div className="text-slate-400">平均成本</div><div className="mt-0.5 font-medium text-slate-700">¥{initialData.price.toFixed(2)}</div></div>
+              </div>
+              <p className="mt-2 text-[10px] leading-4 text-amber-600">货号、尺码和仓库不可在资料编辑中修改；移动仓库请用调拨，库存和成本请用盘点调整。</p>
+            </div>
+          ) : <div className="relative">
             <label className="block text-xs font-medium text-slate-500 mb-1">
               货号 <span className="text-rose-500">必填</span>
             </label>
@@ -421,7 +466,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 ))}
               </div>
             )}
-          </div>
+          </div>}
 
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">
@@ -436,8 +481,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
+          <div className={`grid gap-4 ${initialData ? 'grid-cols-1' : 'grid-cols-2'}`}>
+            {!initialData && <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">
                 所属仓库 <span className="text-rose-500">必填</span>
               </label>
@@ -451,7 +496,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                   <option key={warehouse.id} value={warehouse.name}>{warehouse.name}</option>
                 ))}
               </select>
-            </div>
+            </div>}
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">
                 放置位置 <span className="text-slate-400">选填</span>
@@ -492,7 +537,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          {!initialData && <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">
                 尺码 <span className="text-rose-500">必填</span>
@@ -529,7 +574,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 onChange={(event) => updateProductData({ stock: event.target.value === '' ? undefined : parseInt(event.target.value, 10) })}
               />
             </div>
-          </div>
+          </div>}
 
           {!initialData && (
             <div className="space-y-2">

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, Calculator, ChevronLeft, ChevronRight, Clock3, History, Loader2, RefreshCw, Search, X } from 'lucide-react';
+import { AlertTriangle, Calculator, ChevronLeft, ChevronRight, Clock3, History, Loader2, RefreshCw, Scale, Search, X } from 'lucide-react';
 import { Activity, Warehouse } from '../types';
 import { getActivityGrossAmount, getActivityQuantity } from '../lib/inventoryMetrics';
 import { formatProductSize } from '../lib/productNormalization';
@@ -7,6 +7,7 @@ import { listActivityPage } from '../services/activities';
 import { DataRepairAudit, listDataRepairAuditPage } from '../services/dataHealth';
 import { ACTIVITY_TYPE_LABELS, getActivityTypeLabel } from '../lib/activityPresentation';
 import { SettlementModal } from './SettlementModal';
+import { InventoryAdjustmentAudit, listInventoryAdjustmentAuditPage } from '../services/inventoryAdjustments';
 
 interface ActivityLedgerModalProps {
   isOpen: boolean;
@@ -19,9 +20,10 @@ const PAGE_SIZE = 30;
 const statusLabels: Record<string, string> = { instock: '在售', shipping: '运输中', sold: '已售罄', flaw: '瑕疵' };
 
 export const ActivityLedgerModal: React.FC<ActivityLedgerModalProps> = ({ isOpen, userId, warehouses, onClose }) => {
-  const [view, setView] = useState<'activities' | 'repairs'>('activities');
+  const [view, setView] = useState<'activities' | 'repairs' | 'adjustments'>('activities');
   const [activities, setActivities] = useState<Activity[]>([]);
   const [repairs, setRepairs] = useState<DataRepairAudit[]>([]);
+  const [adjustments, setAdjustments] = useState<InventoryAdjustmentAudit[]>([]);
   const [search, setSearch] = useState('');
   const [type, setType] = useState<Activity['type'] | 'all'>('all');
   const [settlement, setSettlement] = useState<'all' | 'pending' | 'settled'>('all');
@@ -47,10 +49,16 @@ export const ActivityLedgerModal: React.FC<ActivityLedgerModalProps> = ({ isOpen
             setActivities(result.activities);
             setTotalCount(result.totalCount);
           }
-        } else {
+        } else if (view === 'repairs') {
           const result = await listDataRepairAuditPage(userId, page, PAGE_SIZE);
           if (!cancelled) {
             setRepairs(result.repairs);
+            setTotalCount(result.totalCount);
+          }
+        } else {
+          const result = await listInventoryAdjustmentAuditPage({ userId, search, warehouse, period, page, pageSize: PAGE_SIZE });
+          if (!cancelled) {
+            setAdjustments(result.audits);
             setTotalCount(result.totalCount);
           }
         }
@@ -77,14 +85,15 @@ export const ActivityLedgerModal: React.FC<ActivityLedgerModalProps> = ({ isOpen
         <header className="flex items-center justify-between border-b border-slate-100 p-4 dark:border-zinc-800">
           <div>
             <h2 id="activity-ledger-title" className="font-bold text-slate-900 dark:text-white">活动账本</h2>
-            <p className="text-xs text-slate-500 dark:text-zinc-400">库存流水与人工修复记录</p>
+            <p className="text-xs text-slate-500 dark:text-zinc-400">库存流水、人工修复与盘点调整</p>
           </div>
           <button onClick={onClose} className="p-2 text-slate-400" aria-label="关闭活动账本"><X size={20} /></button>
         </header>
 
-        <div className="grid grid-cols-2 border-b border-slate-100 px-3 dark:border-zinc-800">
+        <div className="grid grid-cols-3 border-b border-slate-100 px-3 dark:border-zinc-800">
           <button onClick={() => setView('activities')} className={`py-3 text-sm font-medium ${view === 'activities' ? 'border-b-2 border-dewu-500 text-dewu-600' : 'text-slate-400'}`}>库存流水</button>
           <button onClick={() => setView('repairs')} className={`py-3 text-sm font-medium ${view === 'repairs' ? 'border-b-2 border-amber-500 text-amber-600' : 'text-slate-400'}`}>修复记录</button>
+          <button onClick={() => setView('adjustments')} className={`py-3 text-sm font-medium ${view === 'adjustments' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-slate-400'}`}>盘点调整</button>
         </div>
 
         {view === 'activities' && (
@@ -117,6 +126,22 @@ export const ActivityLedgerModal: React.FC<ActivityLedgerModalProps> = ({ isOpen
                 <option value="all">全部时间</option><option value="month">本自然月</option><option value="30days">近30天</option>
               </select>
             </div>
+          </div>
+        )}
+
+        {view === 'adjustments' && (
+          <div className="grid grid-cols-2 gap-2 border-b border-slate-100 p-3 dark:border-zinc-800">
+            <div className="col-span-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 dark:border-zinc-700 dark:bg-zinc-800">
+              <Search size={16} className="text-slate-400" />
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索货号" className="min-w-0 flex-1 bg-transparent py-2 text-sm outline-none dark:text-white" />
+            </div>
+            <select value={warehouse} onChange={(event) => setWarehouse(event.target.value)} className="min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white">
+              <option value="all">全部仓库</option>
+              {warehouses.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
+            </select>
+            <select value={period} onChange={(event) => setPeriod(event.target.value as 'all' | 'month' | '30days')} className="min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-2 text-[11px] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white">
+              <option value="all">全部时间</option><option value="month">本自然月</option><option value="30days">近30天</option>
+            </select>
           </div>
         )}
 
@@ -158,6 +183,24 @@ export const ActivityLedgerModal: React.FC<ActivityLedgerModalProps> = ({ isOpen
                     {quantity === 0 && <div className="mt-2 flex items-center gap-1 text-[11px] text-red-500"><AlertTriangle size={12} />异常流水，不计入经营统计</div>}
                   </div>;
                 })}
+              </div>
+            )
+          ) : view === 'adjustments' ? (
+            adjustments.length === 0 ? <div className="flex h-full flex-col items-center justify-center text-sm text-slate-400"><Scale size={30} className="mb-2" />暂无盘点调整记录</div> : (
+              <div className="space-y-2">
+                {adjustments.map((audit) => <div key={audit.id} className="rounded-lg border border-slate-100 bg-white p-3 text-xs dark:border-zinc-800 dark:bg-zinc-900">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="font-semibold text-slate-800 dark:text-zinc-100">{audit.sku} · {formatProductSize(audit.size)}</div>
+                    <div className="shrink-0 text-[10px] text-slate-400">{new Date(audit.createdAt).toLocaleString('zh-CN', { hour12: false })}</div>
+                  </div>
+                  <div className="mt-1 text-[11px] text-slate-500">{audit.warehouse}</div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 rounded-lg bg-slate-50 p-2 text-[11px] dark:bg-zinc-800">
+                    <span>库存 {audit.oldStock} → {audit.newStock}</span>
+                    <span>成本 ¥{audit.oldCost.toFixed(2)} → ¥{audit.newCost.toFixed(2)}</span>
+                    {audit.oldStatus !== audit.newStatus && <span className="col-span-2">状态 {statusLabels[audit.oldStatus]} → {statusLabels[audit.newStatus]}</span>}
+                  </div>
+                  <div className="mt-2 text-[11px] text-slate-500">原因：{audit.reason}</div>
+                </div>)}
               </div>
             )
           ) : repairs.length === 0 ? (

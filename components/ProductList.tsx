@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { ArrowRightLeft, Search, Plus, Boxes, CircleDollarSign, Warehouse as WarehouseIcon, ChevronDown, ChevronLeft, ChevronRight, Check, MapPin, Trash2, Edit, X, Loader2, Star, CheckCircle2, Circle } from 'lucide-react';
+import { ArrowRightLeft, Search, Plus, Boxes, CircleDollarSign, Warehouse as WarehouseIcon, ChevronDown, ChevronLeft, ChevronRight, Check, MapPin, Trash2, Edit, X, Loader2, Star, CheckCircle2, Circle, Scale } from 'lucide-react';
 import { Product, Warehouse } from '../types';
 import { supabase } from '../lib/supabase';
 import { listProducts } from '../services/products';
@@ -10,6 +10,7 @@ interface ProductListProps {
   userId: string;
   onAddClick: () => void;
   onEditProduct: (product: Product) => void;
+  onAdjustProduct: (product: Product) => void;
   onTransferProduct: (product: Product) => void;
   onDeleteProduct: (productId: string) => void;
   onBatchDeleteProducts: (productIds: string[]) => Promise<void>;
@@ -30,6 +31,7 @@ interface AggregatedSizeRow {
   averageCost: number;
   sourceCount: number;
   primaryProduct: Product;
+  variants: Product[];
 }
 
 interface AggregatedProductGroup {
@@ -42,7 +44,7 @@ interface AggregatedProductGroup {
   sizeRows: AggregatedSizeRow[];
 }
 
-export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, onEditProduct, onTransferProduct, onDeleteProduct, onBatchDeleteProducts, warehouses, onRenameWarehouse, onSetDefaultWarehouse, onAddWarehouse, onDeleteWarehouse, refreshTrigger }) => {
+export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, onEditProduct, onAdjustProduct, onTransferProduct, onDeleteProduct, onBatchDeleteProducts, warehouses, onRenameWarehouse, onSetDefaultWarehouse, onAddWarehouse, onDeleteWarehouse, refreshTrigger }) => {
   const MAX_WAREHOUSES = 6;
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -69,6 +71,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [isBatchDeleting, setIsBatchDeleting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [aggregatedActionVariants, setAggregatedActionVariants] = useState<Product[] | null>(null);
   
   // Update current warehouse if default changes or initial load
   useEffect(() => {
@@ -370,6 +373,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
         priceSamples: number[];
         sourceCount: number;
         primaryProduct: Product;
+        variants: Product[];
       }>;
     }>();
 
@@ -400,6 +404,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
           priceSamples: [],
           sourceCount: 0,
           primaryProduct: product,
+          variants: [],
         });
       }
 
@@ -411,6 +416,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
       sizeRow.totalCostValue += price * stock;
       sizeRow.priceSamples.push(price);
       sizeRow.sourceCount += 1;
+      sizeRow.variants.push(product);
     });
 
     const parseSizeForSort = (value: string) => {
@@ -438,6 +444,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
             averageCost,
             sourceCount: row.sourceCount,
             primaryProduct: row.primaryProduct,
+            variants: row.variants,
           };
         })
         .sort((a, b) => {
@@ -865,7 +872,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                       {group.sizeRows.map((sizeRow) => (
                         <button
                           key={sizeRow.key}
-                          onClick={() => onEditProduct(sizeRow.primaryProduct)}
+                          onClick={() => setAggregatedActionVariants(sizeRow.variants)}
                           className="w-full px-1.5 py-1 rounded-md border border-slate-100 dark:border-zinc-800 bg-white/90 dark:bg-zinc-900/80 text-left hover:bg-white dark:hover:bg-zinc-900 transition-colors"
                         >
                           <div className="min-w-0 flex flex-col gap-1">
@@ -919,7 +926,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                   >
                     {/* Action Overlay */}
                     {activeProductId === product.id && (
-                      <div className="absolute inset-0 z-20 bg-slate-900/95 dark:bg-black/95 flex items-center justify-center space-x-5 animate-[fadeIn_0.2s_ease-out]"
+                      <div className="absolute inset-0 z-20 grid grid-cols-5 items-center gap-1 bg-slate-900/95 px-3 dark:bg-black/95 animate-[fadeIn_0.2s_ease-out]"
                            onClick={(e) => e.stopPropagation()}
                       >
                         <button 
@@ -930,13 +937,25 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                           }}
                           className="flex flex-col items-center group"
                         >
-                          <div className="p-3 bg-white/10 rounded-full text-white group-active:bg-white/20 transition-colors mb-1">
+                          <div className="mx-auto mb-1 w-fit rounded-full bg-white/10 p-2.5 text-white transition-colors group-active:bg-white/20">
                             <Edit size={20} />
                           </div>
                           <span className="text-[10px] font-medium text-white">修改</span>
                         </button>
 
-                        <div className="w-[1px] h-8 bg-white/10"></div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveProductId(null);
+                            onAdjustProduct(product);
+                          }}
+                          className="flex flex-col items-center group"
+                        >
+                          <div className="mx-auto mb-1 w-fit rounded-full bg-amber-500/20 p-2.5 text-amber-300 transition-colors group-active:bg-amber-500/30">
+                            <Scale size={20} />
+                          </div>
+                          <span className="text-[10px] font-medium text-amber-300">盘点</span>
+                        </button>
 
                         <button
                           onClick={(e) => {
@@ -947,13 +966,11 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                           disabled={product.stock <= 0 || product.status !== 'instock'}
                           className="flex flex-col items-center group disabled:opacity-40"
                         >
-                          <div className="p-3 bg-cyan-500/20 rounded-full text-cyan-300 group-active:bg-cyan-500/30 transition-colors mb-1">
+                          <div className="mx-auto mb-1 w-fit rounded-full bg-cyan-500/20 p-2.5 text-cyan-300 transition-colors group-active:bg-cyan-500/30">
                             <ArrowRightLeft size={20} />
                           </div>
                           <span className="text-[10px] font-medium text-cyan-300">调拨</span>
                         </button>
-
-                        <div className="w-[1px] h-8 bg-white/10"></div>
 
                         <button
                           onClick={(e) => {
@@ -962,14 +979,12 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                           }}
                           className="flex flex-col items-center group"
                         >
-                          <div className="p-3 bg-dewu-500/20 rounded-full text-dewu-300 group-active:bg-dewu-500/30 transition-colors mb-1">
+                          <div className="mx-auto mb-1 w-fit rounded-full bg-dewu-500/20 p-2.5 text-dewu-300 transition-colors group-active:bg-dewu-500/30">
                             <CheckCircle2 size={20} />
                           </div>
                           <span className="text-[10px] font-medium text-dewu-300">勾选</span>
                         </button>
 
-                        <div className="w-[1px] h-8 bg-white/10"></div>
-                        
                         <button 
                           onClick={(e) => {
                             e.stopPropagation();
@@ -980,7 +995,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                           }}
                           className="flex flex-col items-center group"
                         >
-                           <div className="p-3 bg-red-500/20 rounded-full text-red-500 group-active:bg-red-500/30 transition-colors mb-1">
+                           <div className="mx-auto mb-1 w-fit rounded-full bg-red-500/20 p-2.5 text-red-500 transition-colors group-active:bg-red-500/30">
                             <Trash2 size={20} />
                           </div>
                           <span className="text-[10px] font-medium text-red-500">回收站</span>
@@ -1086,6 +1101,35 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
       >
         <Plus size={28} />
       </button>}
+
+      {aggregatedActionVariants && (
+        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/45 p-4 backdrop-blur-sm" onClick={() => setAggregatedActionVariants(null)}>
+          <div className="max-h-[78vh] w-full max-w-sm overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl dark:bg-zinc-950" onClick={(event) => event.stopPropagation()}>
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-bold text-slate-900 dark:text-white">选择仓库与操作</h3>
+                <p className="mt-1 text-[11px] text-slate-500">{aggregatedActionVariants[0]?.sku} · {formatProductSize(aggregatedActionVariants[0]?.size || '')}</p>
+              </div>
+              <button type="button" onClick={() => setAggregatedActionVariants(null)} className="p-2 text-slate-400" aria-label="关闭商品操作"><X size={18} /></button>
+            </div>
+            <div className="space-y-2">
+              {aggregatedActionVariants.map((variant) => (
+                <div key={variant.id} className="rounded-xl border border-slate-200 p-3 dark:border-zinc-800">
+                  <div className="flex items-center justify-between gap-3">
+                    <div><div className="text-sm font-semibold text-slate-800 dark:text-white">{variant.warehouse}</div><div className="mt-1 text-[11px] text-slate-500">库存 {variant.stock} · 平均成本 ¥{Number(variant.price).toFixed(2)}</div></div>
+                    <div className="flex gap-1">
+                      <button type="button" onClick={() => { setAggregatedActionVariants(null); onEditProduct(variant); }} className="flex flex-col items-center gap-0.5 rounded-lg bg-slate-100 px-2 py-1.5 text-[9px] text-slate-600 dark:bg-zinc-800 dark:text-zinc-300" aria-label={`编辑${variant.warehouse}商品资料`}><Edit size={14} /><span>资料</span></button>
+                      <button type="button" onClick={() => { setAggregatedActionVariants(null); onAdjustProduct(variant); }} className="flex flex-col items-center gap-0.5 rounded-lg bg-blue-50 px-2 py-1.5 text-[9px] text-blue-600 dark:bg-blue-950/40 dark:text-blue-300" aria-label={`盘点${variant.warehouse}库存`}><Scale size={14} /><span>盘点</span></button>
+                      <button type="button" disabled={variant.stock <= 0 || variant.status !== 'instock'} onClick={() => { setAggregatedActionVariants(null); onTransferProduct(variant); }} className="flex flex-col items-center gap-0.5 rounded-lg bg-emerald-50 px-2 py-1.5 text-[9px] text-emerald-600 disabled:opacity-30 dark:bg-emerald-950/40 dark:text-emerald-300" aria-label={`调拨${variant.warehouse}库存`}><ArrowRightLeft size={14} /><span>调拨</span></button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {aggregatedActionVariants.length > 1 && <p className="mt-3 text-[11px] leading-5 text-amber-600">该尺码分布在多个仓库。盘点和调拨只作用于你明确选择的仓库，不会修改聚合总量。</p>}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

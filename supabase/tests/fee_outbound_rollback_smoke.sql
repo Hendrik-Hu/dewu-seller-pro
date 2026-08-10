@@ -13,8 +13,10 @@ declare
   v_replay jsonb;
   v_activity public.activities%rowtype;
   v_failed boolean;
+  v_warehouse text;
 begin
-  select id into v_user from auth.users order by created_at limit 1;
+  select warehouse.user_id, warehouse.name into v_user, v_warehouse
+  from public.warehouses warehouse order by warehouse.created_at limit 1;
   if v_user is null then raise exception 'Smoke test requires one auth user'; end if;
   perform set_config('request.jwt.claims', jsonb_build_object('sub',v_user,'role','authenticated')::text, true);
 
@@ -31,7 +33,7 @@ begin
   ) returning id,updated_at into v_scheme_id,v_scheme_updated_at;
 
   insert into public.products (id,name,brand,size,sku,price,stock,image_url,status,location,created_at,warehouse,user_id,deleted_at,source)
-  values (v_product_id,'Fee smoke product','Codex','42','FEE-'||v_suffix,1,5,'','instock','',now(),'Smoke warehouse',v_user,null,'smoke');
+  values (v_product_id,'Fee smoke product','Codex','42','FEE-'||v_suffix,1,5,'','instock','',now(),v_warehouse,v_user,null,'smoke');
 
   v_first := public.outbound_product_with_fees(v_product_id,v_user,1.005,3,'得物',v_operation_id,v_scheme_id,v_scheme_updated_at,null);
   v_replay := public.outbound_product_with_fees(v_product_id,v_user,1.005,3,'得物',v_operation_id,v_scheme_id,v_scheme_updated_at,null);
@@ -54,7 +56,7 @@ begin
   if not v_failed then raise exception 'Changed idempotency payload was accepted'; end if;
 
   insert into public.products (id,name,brand,size,sku,price,stock,image_url,status,location,created_at,warehouse,user_id,deleted_at,source)
-  values (v_zero_product_id,'Zero sale smoke','Codex','43','FEE-ZERO-'||v_suffix,10,1,'','instock','',now(),'Smoke warehouse',v_user,null,'smoke');
+  values (v_zero_product_id,'Zero sale smoke','Codex','43','FEE-ZERO-'||v_suffix,10,1,'','instock','',now(),v_warehouse,v_user,null,'smoke');
   v_first := public.outbound_product_with_fees(v_zero_product_id,v_user,0,1,'线下',v_operation_id||'-zero',null,null,0);
   if (v_first->>'estimated_platform_fee')::numeric <> 0 or (v_first->>'estimated_net_profit')::numeric <> -10 then
     raise exception 'Explicit zero sale or manual fee was not preserved';

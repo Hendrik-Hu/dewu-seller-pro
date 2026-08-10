@@ -6,7 +6,7 @@ const safeText = (value: unknown) => value == null ? '' : String(value);
 const safeNumber = (value: unknown) => value == null ? null : Number(value);
 
 export const createFullLedgerBackup = async (userId: string): Promise<LedgerBackupPackage> => {
-  const [products, activities, warehouses, repairs, feeSchemes, settlements] = await Promise.all([
+  const [products, activities, warehouses, repairs, feeSchemes, settlements, inventoryAdjustments] = await Promise.all([
     fetchAllPages((from, to) => supabase.from('products')
       .select('id,name,brand,size,sku,price,stock,status,location,warehouse,source,created_at,deleted_at', { count: 'exact' })
       .eq('user_id', userId).order('created_at').order('id').range(from, to), { getKey: (row: any) => String(row.id), label: '商品账本' }),
@@ -25,6 +25,9 @@ export const createFullLedgerBackup = async (userId: string): Promise<LedgerBack
     fetchAllPages((from, to) => supabase.from('outbound_settlement_audit')
       .select('id,activity_id,revision,previous_snapshot,settlement_snapshot,created_at', { count: 'exact' })
       .eq('user_id', userId).order('created_at').order('id').range(from, to), { getKey: (row: any) => String(row.id), label: '结算审计' }),
+    fetchAllPages((from, to) => supabase.from('inventory_adjustment_audit')
+      .select('id,operation_id,product_id,sku,size,warehouse,old_stock,new_stock,old_cost,new_cost,old_status,new_status,reason,created_at', { count: 'exact' })
+      .eq('user_id', userId).order('created_at').order('id').range(from, to), { getKey: (row: any) => String(row.id), label: '盘点调整审计' }),
   ]);
 
   return buildLedgerBackupPackage({
@@ -61,6 +64,12 @@ export const createFullLedgerBackup = async (userId: string): Promise<LedgerBack
       createdAt: safeText(row.created_at), updatedAt: safeText(row.updated_at),
     })),
     settlements: settlements.map((row: any) => ({ sourceId: safeText(row.id), activitySourceId: safeText(row.activity_id), revision: safeNumber(row.revision), previousSnapshot: row.previous_snapshot ?? null, settlementSnapshot: row.settlement_snapshot ?? {}, createdAt: safeText(row.created_at) })),
+    inventoryAdjustments: inventoryAdjustments.map((row: any) => ({
+      sourceId: safeText(row.id), operationId: safeText(row.operation_id), productSourceId: safeText(row.product_id),
+      sku: safeText(row.sku), size: safeText(row.size), warehouse: safeText(row.warehouse),
+      oldStock: safeNumber(row.old_stock), newStock: safeNumber(row.new_stock), oldCost: safeNumber(row.old_cost), newCost: safeNumber(row.new_cost),
+      oldStatus: safeText(row.old_status), newStatus: safeText(row.new_status), reason: safeText(row.reason), createdAt: safeText(row.created_at),
+    })),
   });
 };
 

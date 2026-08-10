@@ -32,7 +32,7 @@ begin
     'data',jsonb_build_object(
       'warehouses',jsonb_build_array(
         jsonb_build_object('sourceId','w1-'||v_suffix,'name',v_warehouse,'isDefault',false,'createdAt',now()::text),
-        jsonb_build_object('sourceId','w2-'||v_suffix,'name',v_warehouse,'isDefault',true,'createdAt',now()::text)
+        jsonb_build_object('sourceId','w2-'||v_suffix,'name',v_warehouse||'-secondary','isDefault',true,'createdAt',now()::text)
       ),
       'products',jsonb_build_array(
         jsonb_build_object('sourceId','p1-'||v_suffix,'name','恢复烟测商品','brand','测试品牌','size','42','sku','SMOKE-'||v_suffix,'cost',10,'stock',2,'status','instock','location','','warehouse',v_warehouse,'source','smoke','createdAt',now()::text,'deletedAt',null),
@@ -58,7 +58,7 @@ begin
   v_result := public.restore_ledger_backup(v_user_id,'preview-'||v_suffix,v_package,true);
   insert into ledger_restore_smoke_results values (
     'dry_run_matches_execution_rules',
-    (v_result->>'added')::integer=4 and (v_result->>'merged')::integer=1
+    (v_result->>'added')::integer=5 and (v_result->>'merged')::integer=0
       and (v_result->>'conflicts')::integer=8 and (v_result->>'skipped')::integer=0
   );
 

@@ -9,12 +9,13 @@ const data = {
   repairs: [{ sourceId: 'r1', targetTable: 'products' }],
   feeSchemes: [{ sourceId: 'f1', name: '得物普通出售' }],
   settlements: [{ sourceId: 's1', activitySourceId: 'a1', revision: 1 }],
+  inventoryAdjustments: [{ sourceId: 'ia1', productSourceId: 'p1', oldStock: 1, newStock: 2 }],
 };
 
 test('full ledger backup contains version, counts, media warning and valid integrity hash', async () => {
   const backup = await buildLedgerBackupPackage(data, '2026-08-10T00:00:00.000Z');
-  assert.equal(backup.schemaVersion, 'dewu-seller-pro/ledger-backup@3');
-  assert.deepEqual(backup.counts, { products: 2, activeProducts: 1, recycledProducts: 1, activities: 1, warehouses: 1, repairs: 1, feeSchemes: 1, settlements: 1 });
+  assert.equal(backup.schemaVersion, 'dewu-seller-pro/ledger-backup@4');
+  assert.deepEqual(backup.counts, { products: 2, activeProducts: 1, recycledProducts: 1, activities: 1, warehouses: 1, repairs: 1, feeSchemes: 1, settlements: 1, inventoryAdjustments: 1 });
   assert.equal(backup.media.included, false);
   assert.equal((await parseLedgerBackupPackage(serializeLedgerBackupPackage(backup))).integrity.value, backup.integrity.value);
 });
@@ -23,6 +24,7 @@ test('legacy v1 backup remains parseable with an empty fee scheme collection', a
   const legacyData = { ...data };
   delete (legacyData as any).feeSchemes;
   delete (legacyData as any).settlements;
+  delete (legacyData as any).inventoryAdjustments;
   const unsigned = {
     schemaVersion: 'dewu-seller-pro/ledger-backup@1', exportedAt: '2026-08-10T00:00:00.000Z', scope: 'full-ledger',
     counts: { products: 2, activeProducts: 1, recycledProducts: 1, activities: 1, warehouses: 1, repairs: 1 },
@@ -40,6 +42,7 @@ test('legacy v1 backup remains parseable with an empty fee scheme collection', a
 test('fee-era v2 backup remains parseable without settlement audit data', async () => {
   const v2Data = { ...data } as any;
   delete v2Data.settlements;
+  delete v2Data.inventoryAdjustments;
   const unsigned = {
     schemaVersion: 'dewu-seller-pro/ledger-backup@2', exportedAt: '2026-08-10T00:00:00.000Z', scope: 'full-ledger',
     counts: { products: 2, activeProducts: 1, recycledProducts: 1, activities: 1, warehouses: 1, repairs: 1, feeSchemes: 1 },
@@ -50,6 +53,21 @@ test('fee-era v2 backup remains parseable without settlement audit data', async 
   const parsed = await parseLedgerBackupPackage(JSON.stringify({ ...unsigned, integrity: { algorithm: 'SHA-256', value } }));
   assert.equal(parsed.schemaVersion, 'dewu-seller-pro/ledger-backup@2');
   assert.equal(parsed.data.settlements, undefined);
+});
+
+test('settlement-era v3 backup remains parseable without inventory adjustment audits', async () => {
+  const v3Data = { ...data } as any;
+  delete v3Data.inventoryAdjustments;
+  const unsigned = {
+    schemaVersion: 'dewu-seller-pro/ledger-backup@3', exportedAt: '2026-08-10T00:00:00.000Z', scope: 'full-ledger',
+    counts: { products: 2, activeProducts: 1, recycledProducts: 1, activities: 1, warehouses: 1, repairs: 1, feeSchemes: 1, settlements: 1 },
+    media: { included: false, note: 'v3' }, data: v3Data,
+  } as any;
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(stableStringify(unsigned)));
+  const value = Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  const parsed = await parseLedgerBackupPackage(JSON.stringify({ ...unsigned, integrity: { algorithm: 'SHA-256', value } }));
+  assert.equal(parsed.schemaVersion, 'dewu-seller-pro/ledger-backup@3');
+  assert.equal(parsed.data.inventoryAdjustments, undefined);
 });
 
 test('backup parser rejects unsupported, tampered and count-mismatched packages', async () => {

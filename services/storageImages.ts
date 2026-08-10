@@ -9,6 +9,14 @@ export const createProductImageRef = (path: string) => `${PRODUCT_IMAGE_PREFIX}$
 export const isProductImageRef = (value?: string): boolean =>
   Boolean(value?.startsWith(PRODUCT_IMAGE_PREFIX));
 
+export const removeProductImageRef = async (value?: string) => {
+  if (!isProductImageRef(value)) return;
+  const path = value!.slice(PRODUCT_IMAGE_PREFIX.length);
+  const { error } = await supabase.storage.from('product-images').remove([path]);
+  if (error) throw error;
+  signedUrlCache.delete(value!);
+};
+
 export const resolveStorageImageUrl = async (value?: string): Promise<string> => {
   if (!isProductImageRef(value)) return value || '';
 

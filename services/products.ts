@@ -1,9 +1,8 @@
 import { supabase } from '../lib/supabase';
 import { Product } from '../types';
 import { mapProductFromDb, mapProductToDb } from './mappers';
-import { mergeProductsWithLocalMetadata, saveProductLocalMetadata } from './productMetadata';
-import { normalizeSku } from '../lib/productNormalization';
-import { resolveStorageImageUrl } from './storageImages';
+import { mergeProductsWithLocalMetadata } from './productMetadata';
+import { isProductImageRef, resolveStorageImageUrl } from './storageImages';
 import { fetchAllPages } from './pagination';
 
 export interface ListProductsParams {
@@ -21,7 +20,6 @@ export interface ProductPage {
 }
 
 const escapeOrValue = (value: string) => value.replace(/[%(),]/g, '\\$&');
-const isMissingSourceColumnError = (error: any) => String(error?.message || '').includes('source');
 
 export const listProducts = async ({
   userId,
@@ -107,31 +105,41 @@ export const getWarehouseProductSummary = async (userId: string, warehouse: stri
   );
 };
 
-export const upsertProduct = async (product: Product, userId: string) => {
-  const dbRow = mapProductToDb(product, userId);
-  let { error } = await supabase
-    .from('products')
-    .upsert(dbRow);
-
-  if (error && isMissingSourceColumnError(error)) {
-    const { source: _source, ...fallbackRow } = dbRow;
-    const retry = await supabase
-      .from('products')
-      .upsert(fallbackRow);
-    error = retry.error;
-  }
+export const updateProductMetadata = async (
+  product: Product,
+  _userId: string,
+  trustedImageRef?: string,
+) => {
+  const { error } = await supabase.rpc('update_product_metadata', {
+    p_brand: product.brand,
+    p_image_ref: trustedImageRef || null,
+    p_location: product.location || '',
+    p_name: product.name,
+    p_product_id: product.id,
+    p_source: product.source || '',
+  });
 
   if (error) throw error;
-  await saveProductLocalMetadata(userId, product);
 };
 
-export const deleteProduct = async (productId: string, userId: string) => {
-  const { error } = await supabase
-    .from('products')
-    .update({ deleted_at: new Date().toISOString() })
-    .eq('id', productId)
-    .eq('user_id', userId);
+export const deleteProduct = async (productId: string, _userId: string) => {
+  const { error } = await supabase.rpc('soft_delete_products', {
+    p_product_ids: [productId],
+  });
 
+  if (error) throw error;
+};
+export const deleteProducts = async (productIds: string[]) => {
+  const { error } = await supabase.rpc('soft_delete_products', {
+    p_product_ids: productIds,
+  });
+  if (error) throw error;
+};
+
+export const completePendingProducts = async (productIds: string[]) => {
+  const { error } = await supabase.rpc('complete_pending_products', {
+    p_product_ids: productIds,
+  });
   if (error) throw error;
 };
 
@@ -193,7 +201,9 @@ export const batchInboundProducts = async (products: Product[], userId: string):
       size: normalized.size,
       cost: normalized.price,
       quantity: normalized.stock,
-      image_url: normalized.image_url,
+      image_url: isProductImageRef(product.imageStorageRef)
+        ? product.imageStorageRef
+        : isProductImageRef(product.imageUrl) ? product.imageUrl : '',
       status: normalized.status,
       location: normalized.location,
       warehouse: normalized.warehouse,
@@ -217,73 +227,5 @@ export const batchInboundProducts = async (products: Product[], userId: string):
     averageCost: Number(item.average_cost),
   })) : [];
 
-  const metadataWrites = await Promise.allSettled(results.map((result) => {
-    const product = products[result.inputIndex];
-    return product ? saveProductLocalMetadata(userId, { ...product, id: result.productId }) : Promise.resolve();
-  }));
-  if (metadataWrites.some((result) => result.status === 'rejected')) {
-    console.warn('Inbound committed, but some local product metadata could not be cached.');
-  }
-
   return results;
-};
-
-export const updateProductStock = async (productId: string, userId: string, stock: number) => {
-  const { error } = await supabase
-    .from('products')
-    .update({ stock })
-    .eq('id', productId)
-    .eq('user_id', userId);
-
-  if (error) throw error;
-};
-
-export const updateProductStatus = async (
-  productId: string,
-  userId: string,
-  status: Product['status']
-) => {
-  const { error } = await supabase
-    .from('products')
-    .update({ status })
-    .eq('id', productId)
-    .eq('user_id', userId);
-
-  if (error) throw error;
-};
-
-export const batchUpdateProductStatus = async (
-  productIds: string[],
-  userId: string,
-  status: Product['status']
-) => {
-  if (productIds.length === 0) return;
-
-  const { error } = await supabase
-    .from('products')
-    .update({ status })
-    .in('id', productIds)
-    .eq('user_id', userId);
-
-  if (error) throw error;
-};
-
-export const renameProductsWarehouse = async (userId: string, oldName: string, newName: string) => {
-  const { error } = await supabase
-    .from('products')
-    .update({ warehouse: newName })
-    .eq('warehouse', oldName)
-    .eq('user_id', userId);
-
-  if (error) throw error;
-};
-
-export const syncProductMainImageBySku = async (userId: string, sku: string, imageUrl: string) => {
-  const { error } = await supabase
-    .from('products')
-    .update({ image_url: imageUrl })
-    .eq('user_id', userId)
-    .ilike('sku', normalizeSku(sku));
-
-  if (error) throw error;
 };

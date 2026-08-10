@@ -12,12 +12,13 @@ import { DataHealthModal } from './components/DataHealthModal';
 import { BackupRestoreModal } from './components/BackupRestoreModal';
 import { FeeSchemeModal } from './components/FeeSchemeModal';
 import { AddProductModal } from './components/AddProductModal';
+import { InventoryAdjustmentModal } from './components/InventoryAdjustmentModal';
 import { OutboundModal } from './components/OutboundModal';
 import { PendingOrdersModal } from './components/PendingOrdersModal';
 import { Tab, Product, Activity, Warehouse, OutboundFeeSelection } from './types';
 import { supabase } from './lib/supabase';
-import { createInventoryActivity, listActivities } from './services/activities';
-import { batchInboundProducts, batchUpdateProductStatus, deleteProduct, listAllProducts, syncProductMainImageBySku, upsertProduct } from './services/products';
+import { listActivities } from './services/activities';
+import { batchInboundProducts, completePendingProducts, deleteProduct, deleteProducts, listAllProducts, updateProductMetadata } from './services/products';
 import { outboundProduct } from './services/outbound';
 import { buildInventoryAnalytics } from './lib/inventoryMetrics';
 import { Loader2 } from 'lucide-react';
@@ -26,8 +27,8 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { parseRecoveryUrl } from './lib/authRecovery';
 import { SystemBars } from './lib/systemBars';
-import { formatProductSize, normalizeProduct, sameInventoryVariant } from './lib/productNormalization';
-import { createProductImageRef, isProductImageRef } from './services/storageImages';
+import { normalizeProduct } from './lib/productNormalization';
+import { createProductImageRef, isProductImageRef, removeProductImageRef } from './services/storageImages';
 import { createWarehouse, deleteWarehouse, listWarehouses, renameWarehouse, setDefaultWarehouse } from './services/warehouses';
 import { countOrphanWarehouseProducts } from './services/dataHealth';
 
@@ -220,6 +221,7 @@ export default function App() {
   
   // Modals
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [adjustingProduct, setAdjustingProduct] = useState<Product | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showOutboundModal, setShowOutboundModal] = useState(false);
   const [showPendingModal, setShowPendingModal] = useState(false);
@@ -334,97 +336,32 @@ export default function App() {
       }
 
       const product = productInput;
-      if (Number(product.stock) < 0 || Number(editingProduct?.stock) < 0) {
+      if (!editingProduct || editingProduct.id !== product.id) {
+        throw new Error('普通新增库存必须使用原子入库流程');
+      }
+      if (Number(product.stock) < 0 || Number(editingProduct.stock) < 0) {
         setShowAddModal(false);
         setEditingProduct(null);
         setShowDataHealth(true);
         throw new Error('该记录存在负库存异常，只能通过数据体检修正');
       }
-      const normalizedProduct = normalizeProduct(product);
-      const anomalousVariant = products.find(
-        p => Number(p.stock) < 0 && sameInventoryVariant(p, normalizedProduct)
-      );
-      if (anomalousVariant) {
-        setShowAddModal(false);
-        setEditingProduct(null);
-        setShowDataHealth(true);
-        throw new Error('同仓库、货号和尺码存在负库存异常，请先完成数据体检后再入库');
-      }
-      // Check for existing product with same SKU and Size (Unique constraint logic)
-      const existingProduct = products.find(
-        p => sameInventoryVariant(p, normalizedProduct) && p.id !== normalizedProduct.id
-      );
-
-      let finalProduct = { ...normalizedProduct };
-      let isMerge = false;
-
-      // If adding new product and duplicate found
-      if (existingProduct && !editingProduct) {
-        const confirmMerge = confirm(
-          `检测到仓库中已存在 [${existingProduct.sku} - ${formatProductSize(existingProduct.size)}]。\n\n` +
-          `现有库存: ${existingProduct.stock} 件\n` +
-          `现有成本: ¥${existingProduct.price}\n\n` +
-          `将执行合并入库，并自动计算平均成本。是否继续？`
-        );
-        
-        if (!confirmMerge) return;
-
-        isMerge = true;
-        // Weighted average price calculation
-        const totalValue = (existingProduct.price * existingProduct.stock) + (normalizedProduct.price * normalizedProduct.stock);
-        const totalStock = existingProduct.stock + normalizedProduct.stock;
-        const avgPrice = parseFloat((totalValue / totalStock).toFixed(2));
-
-        finalProduct = {
-          ...existingProduct,
-          price: avgPrice,
-          stock: totalStock,
-          location: normalizedProduct.location || existingProduct.location,
-          warehouse: normalizedProduct.warehouse || existingProduct.warehouse,
-          status: 'instock'
-        };
-      }
-
       if (!session?.user?.id) return;
-      const uploadedImageUrl = await uploadProductImage(session.user.id, normalizedProduct);
-
-      finalProduct = {
-        ...finalProduct,
-        imageUrl: uploadedImageUrl || finalProduct.imageUrl || '',
-        imageStorageRef: isProductImageRef(uploadedImageUrl) ? uploadedImageUrl : finalProduct.imageStorageRef,
-        source: normalizedProduct.source || finalProduct.source || '',
-        imageDataUrl: '',
-        imageFile: undefined,
-      };
-
-      await upsertProduct(finalProduct, session.user.id);
-
-      if (uploadedImageUrl) {
-        await syncProductMainImageBySku(session.user.id, finalProduct.sku, uploadedImageUrl);
+      const hasNewImage = Boolean(product.imageFile || product.imageDataUrl?.startsWith('data:'));
+      const uploadedImageRef = hasNewImage ? await uploadProductImage(session.user.id, product) : undefined;
+      try {
+        await updateProductMetadata(product, session.user.id, uploadedImageRef);
+      } catch (metadataError) {
+        if (hasNewImage && isProductImageRef(uploadedImageRef)) {
+          try {
+            await removeProductImageRef(uploadedImageRef);
+          } catch (cleanupError) {
+            console.warn('Metadata update failed and the new image could not be removed.', cleanupError);
+          }
+        }
+        throw metadataError;
       }
 
-      // Add Activity Log
-      if (!editingProduct || isMerge) {
-         try {
-           await createInventoryActivity({
-             userId: session.user.id,
-             type: 'inbound',
-             productName: finalProduct.name,
-             sku: finalProduct.sku,
-             size: finalProduct.size,
-             price: isMerge ? normalizedProduct.price : finalProduct.price,
-             cost: isMerge ? normalizedProduct.price : finalProduct.price,
-             imageUrl: finalProduct.imageUrl,
-             warehouse: finalProduct.warehouse,
-             count: normalizedProduct.stock,
-             source: normalizedProduct.source,
-           });
-         } catch (insertActError) {
-           console.error('Activity Insert Error:', insertActError);
-         }
-      }
-
-      fetchData();
+      await fetchData();
       setRefreshTrigger(prev => prev + 1); // Trigger refresh for ProductList
       setShowAddModal(false);
       setEditingProduct(null);
@@ -446,6 +383,15 @@ export default function App() {
     }
     setEditingProduct(product);
     setShowAddModal(true);
+  };
+
+  const handleAdjustProduct = (product: Product) => {
+    if (Number(product.stock) < 0) {
+      setShowDataHealth(true);
+      alert('负库存异常只能先通过数据体检修正，不能进入普通盘点调整。');
+      return;
+    }
+    setAdjustingProduct(product);
   };
 
   const handleDeleteProduct = async (productId: string) => {
@@ -491,7 +437,7 @@ export default function App() {
     if (!session?.user?.id || productIds.length === 0) return;
 
     try {
-      await Promise.all(productIds.map((productId) => deleteProduct(productId, session.user.id)));
+      await deleteProducts(productIds);
       fetchData();
       setRefreshTrigger(prev => prev + 1);
       setShowAddModal(false);
@@ -508,7 +454,7 @@ export default function App() {
     if (!session?.user?.id || productIds.length === 0) return;
 
     try {
-      await batchUpdateProductStatus(productIds, session.user.id, 'sold');
+      await completePendingProducts(productIds);
       fetchData();
       setRefreshTrigger(prev => prev + 1);
       alert(`已完成 ${productIds.length} 个待发货商品`);
@@ -631,6 +577,7 @@ export default function App() {
             userId={session.user.id}
             onAddClick={handleInboundEntry}
             onEditProduct={handleEditClick}
+            onAdjustProduct={handleAdjustProduct}
             onTransferProduct={(product) => {
               setTransferProductTarget(product);
               setShowTransferModal(true);
@@ -740,6 +687,16 @@ export default function App() {
               warehouses={warehouses}
               existingProducts={products}
               userId={session.user.id}
+            />
+            <InventoryAdjustmentModal
+              isOpen={Boolean(adjustingProduct)}
+              userId={session.user.id}
+              product={adjustingProduct}
+              onClose={() => setAdjustingProduct(null)}
+              onSaved={async () => {
+                await fetchData();
+                setRefreshTrigger((value) => value + 1);
+              }}
             />
             <OutboundModal
               isOpen={showOutboundModal}
