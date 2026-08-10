@@ -1,8 +1,7 @@
 import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, Loader2, Plus, Save, Sparkles, Trash2, X } from 'lucide-react';
+import { Camera, Plus, Save, Trash2, X } from 'lucide-react';
 import { Preferences } from '@capacitor/preferences';
 import { Product, Warehouse } from '../types';
-import { supabase } from '../lib/supabase';
 import { normalizeBrand, normalizeSize, normalizeSku } from '../lib/productNormalization';
 
 interface AddProductModalProps {
@@ -70,7 +69,6 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   existingProducts,
   userId,
 }) => {
-  const [isLookingUp, setIsLookingUp] = useState(false);
   const [productData, setProductData] = useState<Partial<Product>>(createEmptyDraft(warehouses));
   const [additionalVariants, setAdditionalVariants] = useState<AdditionalVariant[]>([]);
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
@@ -196,41 +194,6 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       imageUrl: productData.imageDataUrl ? productData.imageUrl : (productData.imageUrl || product.imageUrl),
     });
     setShowSkuSuggestions(false);
-  };
-
-  const handleSmartLookup = async () => {
-    if (!productData.sku) {
-      alert('请先输入货号');
-      return;
-    }
-
-    setIsLookingUp(true);
-
-    try {
-      const { data, error } = await supabase.functions.invoke('lookup-sku', {
-        body: { sku: productData.sku },
-      });
-
-      if (error) {
-        console.warn('SKU lookup failed.', error);
-        alert('货号查询暂时不可用，请手动输入商品信息。');
-      } else if (data && data.found) {
-        updateProductData({
-          name: data.name,
-          brand: data.brand,
-          imageUrl: productData.imageDataUrl || data.imageUrl,
-          price: data.price !== undefined ? data.price : productData.price,
-          size: data.size !== undefined ? data.size : productData.size,
-        });
-      } else {
-        alert('未找到该商品信息');
-      }
-    } catch (error) {
-      console.error(error);
-      alert('识别失败');
-    } finally {
-      setIsLookingUp(false);
-    }
   };
 
   const handlePhotoChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -428,28 +391,20 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             <label className="block text-xs font-medium text-slate-500 mb-1">
               货号 <span className="text-rose-500">必填</span>
             </label>
-            <div className="flex space-x-2">
-              <input
-                ref={skuInputRef}
-                type="text"
-                className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-dewu-500 transition-colors uppercase"
-                placeholder="DD1391-100"
-                value={productData.sku}
-                onFocus={() => setShowSkuSuggestions(true)}
-                onBlur={() => window.setTimeout(() => setShowSkuSuggestions(false), 120)}
-                onChange={(event) => {
-                  updateProductData({ sku: event.target.value.toUpperCase() });
-                  setShowSkuSuggestions(true);
-                }}
-              />
-              <button
-                onClick={handleSmartLookup}
-                disabled={isLookingUp || !productData.sku}
-                className="bg-indigo-600 text-white px-3 rounded-lg flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all shadow-sm shadow-indigo-200"
-              >
-                {isLookingUp ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
-              </button>
-            </div>
+            <input
+              ref={skuInputRef}
+              type="text"
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-dewu-500 transition-colors uppercase"
+              placeholder="DD1391-100"
+              value={productData.sku}
+              onFocus={() => setShowSkuSuggestions(true)}
+              onBlur={() => window.setTimeout(() => setShowSkuSuggestions(false), 120)}
+              onChange={(event) => {
+                updateProductData({ sku: event.target.value.toUpperCase() });
+                setShowSkuSuggestions(true);
+              }}
+            />
+            <div className="mt-1 text-[11px] text-slate-400">输入后仅联想当前账号库存中已有的货号，最多显示 5 条。</div>
             {showSkuSuggestions && skuSuggestions.length > 0 && (
               <div className="absolute z-10 mt-2 w-full rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden">
                 {skuSuggestions.map((product) => (
