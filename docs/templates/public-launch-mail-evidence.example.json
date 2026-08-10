@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "seller-inventory/public-launch-mail-evidence@1",
+  "testedAt": "2026-08-10T12:00:00.000Z",
+  "siteOrigin": "https://inventory.example.com",
+  "projectRef": "your-project-ref",
+  "registrationConfirmation": {
+    "status": "passed",
+    "completedAt": "2026-08-10T11:50:00.000Z",
+    "evidenceRef": "release-record:signup-confirm-20260810"
+  },
+  "passwordRecovery": {
+    "status": "passed",
+    "completedAt": "2026-08-10T11:55:00.000Z",
+    "evidenceRef": "release-record:password-recovery-20260810"
+  }
+}

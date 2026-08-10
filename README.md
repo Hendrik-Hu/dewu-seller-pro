@@ -60,11 +60,14 @@ npm run build          # Build web app to dist/
 npm run preview        # Preview production build
 npm run typecheck      # Run TypeScript checks
 npm run android:sync   # Build and sync Capacitor Android project
+npm run check:public-launch # Verify the final public-launch gate (expected to fail in closed test)
 .\build_debug_apk.ps1  # Build Android debug test APK
 .\build_release_android.ps1 # Build signed Release APK and AAB
 ```
 
 Android 同步会校验 `VITE_PUBLIC_SITE_URL`。它必须是已验证可公开访问的 HTTPS 站点，并提供 `/privacy.html`、`/account-deletion.html` 与 `/auth/recovery`；缺失或使用本机地址时构建会停止。
+
+公开发布前必须额外运行 `npm run check:public-launch`。该命令核对自有域名、Supabase 邮件配置、近期注册确认/密码恢复整链凭证、公开政策与支持入口安全头，以及 Android App Link。配置和凭证格式见 `docs/public-launch-gate.md`；当前闭测环境预期因自有域名和 Custom SMTP 整链缺失而非零退出。
 
 如果 Windows 全局没有 `npm`，项目里的 PowerShell 脚本会优先使用本地 `node-v20.11.0-win-x64`。
 

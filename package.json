@@ -9,6 +9,7 @@
     "preview": "node ./node_modules/vite/bin/vite.js preview",
     "check:bundle": "node scripts/check-first-screen-bundle.mjs",
     "check:android-assets": "node scripts/check-android-assets.mjs",
+    "check:public-launch": "node scripts/public-launch-gate.mjs",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
     "android:sync": "node ./node_modules/vite/bin/vite.js build && node ./node_modules/@capacitor/cli/bin/capacitor sync android"
