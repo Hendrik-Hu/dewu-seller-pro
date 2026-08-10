@@ -74,7 +74,7 @@ Android 同步会校验 `VITE_PUBLIC_SITE_URL`。它必须是已验证可公开�
 components/                 React UI screens and modals
 services/                   Supabase data access helpers
 lib/supabase.ts             Supabase client bootstrap
-supabase/functions/         Edge Functions for AI and SKU lookup
+supabase/functions/         Edge Functions for AI, account security and media uploads
 android/                    Capacitor Android project
 public/                     PWA manifest and icon
 ```
