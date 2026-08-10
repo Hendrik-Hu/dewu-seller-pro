@@ -3,19 +3,7 @@ import { WelcomeScreen } from './components/WelcomeScreen';
 import { AuthScreen } from './components/AuthScreen';
 import { BottomNav } from './components/BottomNav';
 import { Home } from './components/Home';
-import { ProductList } from './components/ProductList';
-import { Stats } from './components/Stats';
-import { Profile } from './components/Profile';
-import { RecycleBinModal } from './components/RecycleBinModal';
-import { TransferProductModal } from './components/TransferProductModal';
-import { DataHealthModal } from './components/DataHealthModal';
-import { BackupRestoreModal } from './components/BackupRestoreModal';
-import { FeeSchemeModal } from './components/FeeSchemeModal';
-import { AddProductModal } from './components/AddProductModal';
-import { InventoryAdjustmentModal } from './components/InventoryAdjustmentModal';
-import { FirstWarehouseModal } from './components/FirstWarehouseModal';
-import { OutboundModal } from './components/OutboundModal';
-import { TransitInventoryModal } from './components/PendingOrdersModal';
+import { createDeferredComponent } from './components/DeferredComponent';
 import { Tab, Product, Activity, Warehouse, OutboundFeeSelection } from './types';
 import { supabase } from './lib/supabase';
 import { listRecentActivities } from './services/activities';
@@ -40,6 +28,59 @@ import {
 import { createWarehouse, deleteWarehouse, listWarehouses, renameWarehouse, setDefaultWarehouse } from './services/warehouses';
 import { countOrphanWarehouseProducts } from './services/dataHealth';
 import { clearPendingFirstWarehouseCreation } from './services/firstWarehouseCreation';
+
+const ProductList = createDeferredComponent(
+  () => import('./components/ProductList').then(({ ProductList: component }) => component),
+  { label: '库存管理', kind: 'page' },
+);
+const Stats = createDeferredComponent(
+  () => import('./components/Stats').then(({ Stats: component }) => component),
+  { label: '数据统计', kind: 'page' },
+);
+const Profile = createDeferredComponent(
+  () => import('./components/Profile').then(({ Profile: component }) => component),
+  { label: '个人中心', kind: 'page' },
+);
+const AddProductModal = createDeferredComponent(
+  () => import('./components/AddProductModal').then(({ AddProductModal: component }) => component),
+  { label: '入库表单', kind: 'modal' },
+);
+const FirstWarehouseModal = createDeferredComponent(
+  () => import('./components/FirstWarehouseModal').then(({ FirstWarehouseModal: component }) => component),
+  { label: '首仓创建', kind: 'modal' },
+);
+const InventoryAdjustmentModal = createDeferredComponent(
+  () => import('./components/InventoryAdjustmentModal').then(({ InventoryAdjustmentModal: component }) => component),
+  { label: '盘点调整', kind: 'modal' },
+);
+const OutboundModal = createDeferredComponent(
+  () => import('./components/OutboundModal').then(({ OutboundModal: component }) => component),
+  { label: '出库表单', kind: 'modal' },
+);
+const TransitInventoryModal = createDeferredComponent(
+  () => import('./components/PendingOrdersModal').then(({ TransitInventoryModal: component }) => component),
+  { label: '采购运输中库存', kind: 'modal' },
+);
+const RecycleBinModal = createDeferredComponent(
+  () => import('./components/RecycleBinModal').then(({ RecycleBinModal: component }) => component),
+  { label: '回收站', kind: 'modal' },
+);
+const DataHealthModal = createDeferredComponent(
+  () => import('./components/DataHealthModal').then(({ DataHealthModal: component }) => component),
+  { label: '数据体检', kind: 'modal' },
+);
+const BackupRestoreModal = createDeferredComponent(
+  () => import('./components/BackupRestoreModal').then(({ BackupRestoreModal: component }) => component),
+  { label: '账本导出与恢复', kind: 'modal' },
+);
+const FeeSchemeModal = createDeferredComponent(
+  () => import('./components/FeeSchemeModal').then(({ FeeSchemeModal: component }) => component),
+  { label: '费用方案', kind: 'modal' },
+);
+const TransferProductModal = createDeferredComponent(
+  () => import('./components/TransferProductModal').then(({ TransferProductModal: component }) => component),
+  { label: '库存调拨', kind: 'modal' },
+);
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -880,105 +921,125 @@ export default function App() {
             </main>
             <BottomNav currentTab={currentTab} onTabChange={setCurrentTab} />
             {/* Modals rendered at root level */}
-            <AddProductModal 
-              isOpen={showAddModal} 
-              onClose={() => {
-                setShowAddModal(false);
-                setEditingProduct(null);
-              }} 
-              onSave={handleAddOrUpdateProduct}
-              onDelete={handleDeleteProduct}
-              initialData={editingProduct}
-              warehouses={warehouses}
-              userId={session.user.id}
-            />
-            <FirstWarehouseModal
-              isOpen={showFirstWarehouseModal}
-              userId={session.user.id}
-              onClose={() => setShowFirstWarehouseModal(false)}
-              onCreate={handleAddWarehouse}
-              onVerify={verifyWarehouseByName}
-              onCreated={() => {
-                setShowFirstWarehouseModal(false);
-                setEditingProduct(null);
-                setShowAddModal(true);
-              }}
-            />
-            <InventoryAdjustmentModal
-              isOpen={Boolean(adjustingProduct)}
-              userId={session.user.id}
-              product={adjustingProduct}
-              mode={adjustmentMode}
-              onClose={() => {
-                setAdjustingProduct(null);
-                setAdjustmentMode('inventory');
-              }}
-              onSaved={async () => {
-                await fetchData();
-                setRefreshTrigger((value) => value + 1);
-              }}
-            />
-            <OutboundModal
-              isOpen={showOutboundModal}
-              onClose={() => setShowOutboundModal(false)}
-              userId={session.user.id}
-              onOutbound={handleOutboundProduct}
-            />
-            <TransitInventoryModal
-              isOpen={showTransitModal}
-              onClose={() => setShowTransitModal(false)}
-              userId={session.user.id}
-              onReviewArrival={(product) => {
-                setShowTransitModal(false);
-                setAdjustmentMode('transit-arrival');
-                setAdjustingProduct(product);
-              }}
-            />
-            <RecycleBinModal
-              isOpen={showRecycleBin}
-              onClose={() => setShowRecycleBin(false)}
-              userId={session.user.id}
-              onRestored={() => {
-                fetchData();
-                setRefreshTrigger((value) => value + 1);
-              }}
-            />
-            <DataHealthModal
-              isOpen={showDataHealth}
-              userId={session.user.id}
-              onClose={() => setShowDataHealth(false)}
-              onRepaired={() => {
-                fetchData();
-                setRefreshTrigger((value) => value + 1);
-              }}
-            />
-            <BackupRestoreModal
-              isOpen={showBackupRestore}
-              userId={session.user.id}
-              onClose={() => setShowBackupRestore(false)}
-              onRestored={() => {
-                fetchData();
-                setRefreshTrigger((value) => value + 1);
-              }}
-            />
-            <FeeSchemeModal
-              isOpen={showFeeSchemes}
-              userId={session.user.id}
-              onClose={() => setShowFeeSchemes(false)}
-            />
-            <TransferProductModal
-              isOpen={showTransferModal}
-              product={transferProductTarget}
-              warehouses={warehouses}
-              userId={session.user.id}
-              onClose={() => setShowTransferModal(false)}
-              onTransferred={() => {
-                setShowTransferModal(false);
-                setTransferProductTarget(null);
-                fetchData();
-                setRefreshTrigger((value) => value + 1);
-              }}
-            />
+            {showAddModal && (
+              <AddProductModal
+                isOpen
+                onClose={() => {
+                  setShowAddModal(false);
+                  setEditingProduct(null);
+                }}
+                onSave={handleAddOrUpdateProduct}
+                onDelete={handleDeleteProduct}
+                initialData={editingProduct}
+                warehouses={warehouses}
+                userId={session.user.id}
+              />
+            )}
+            {showFirstWarehouseModal && (
+              <FirstWarehouseModal
+                isOpen
+                userId={session.user.id}
+                onClose={() => setShowFirstWarehouseModal(false)}
+                onCreate={handleAddWarehouse}
+                onVerify={verifyWarehouseByName}
+                onCreated={() => {
+                  setShowFirstWarehouseModal(false);
+                  setEditingProduct(null);
+                  setShowAddModal(true);
+                }}
+              />
+            )}
+            {adjustingProduct && (
+              <InventoryAdjustmentModal
+                isOpen
+                userId={session.user.id}
+                product={adjustingProduct}
+                mode={adjustmentMode}
+                onClose={() => {
+                  setAdjustingProduct(null);
+                  setAdjustmentMode('inventory');
+                }}
+                onSaved={async () => {
+                  await fetchData();
+                  setRefreshTrigger((value) => value + 1);
+                }}
+              />
+            )}
+            {showOutboundModal && (
+              <OutboundModal
+                isOpen
+                onClose={() => setShowOutboundModal(false)}
+                userId={session.user.id}
+                onOutbound={handleOutboundProduct}
+              />
+            )}
+            {showTransitModal && (
+              <TransitInventoryModal
+                isOpen
+                onClose={() => setShowTransitModal(false)}
+                userId={session.user.id}
+                onReviewArrival={(product) => {
+                  setShowTransitModal(false);
+                  setAdjustmentMode('transit-arrival');
+                  setAdjustingProduct(product);
+                }}
+              />
+            )}
+            {showRecycleBin && (
+              <RecycleBinModal
+                isOpen
+                onClose={() => setShowRecycleBin(false)}
+                userId={session.user.id}
+                onRestored={() => {
+                  fetchData();
+                  setRefreshTrigger((value) => value + 1);
+                }}
+              />
+            )}
+            {showDataHealth && (
+              <DataHealthModal
+                isOpen
+                userId={session.user.id}
+                onClose={() => setShowDataHealth(false)}
+                onRepaired={() => {
+                  fetchData();
+                  setRefreshTrigger((value) => value + 1);
+                }}
+              />
+            )}
+            {showBackupRestore && (
+              <BackupRestoreModal
+                isOpen
+                userId={session.user.id}
+                onClose={() => setShowBackupRestore(false)}
+                onRestored={() => {
+                  fetchData();
+                  setRefreshTrigger((value) => value + 1);
+                }}
+              />
+            )}
+            {showFeeSchemes && (
+              <FeeSchemeModal
+                isOpen
+                userId={session.user.id}
+                onClose={() => setShowFeeSchemes(false)}
+              />
+            )}
+            {showTransferModal && transferProductTarget && (
+              <TransferProductModal
+                isOpen
+                product={transferProductTarget}
+                warehouses={warehouses}
+                userId={session.user.id}
+                onClose={() => setShowTransferModal(false)}
+                onTransferred={() => {
+                  setShowTransferModal(false);
+                  setTransferProductTarget(null);
+                  fetchData();
+                  setRefreshTrigger((value) => value + 1);
+                }}
+              />
+            )}
           </>
         )}
         

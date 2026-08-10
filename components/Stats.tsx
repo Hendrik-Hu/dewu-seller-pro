@@ -12,8 +12,13 @@ import {
   YAxis,
 } from 'recharts';
 import { Bot, RefreshCw, Send, Sparkles } from 'lucide-react';
-import { AIManagementModal } from './AIManagementModal';
 import type { InventoryAnalytics } from '../lib/inventoryMetrics';
+import { createDeferredComponent } from './DeferredComponent';
+
+const AIManagementModal = createDeferredComponent(
+  () => import('./AIManagementModal').then(({ AIManagementModal: component }) => component),
+  { label: 'AI 助手', kind: 'modal' },
+);
 
 interface StatsProps {
   analytics: InventoryAnalytics;
@@ -143,11 +148,13 @@ export const Stats: React.FC<StatsProps> = ({ analytics, analyticsReady, analyti
         </div>
       </div>
 
-      <AIManagementModal
-        isOpen={isAIModalOpen}
-        onClose={() => setIsAIModalOpen(false)}
-        onExecuted={onAIExecuted}
-      />
+      {isAIModalOpen && (
+        <AIManagementModal
+          isOpen
+          onClose={() => setIsAIModalOpen(false)}
+          onExecuted={onAIExecuted}
+        />
+      )}
 
       <div className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm mb-6">
         <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-4">近30天销售额趋势</h3>

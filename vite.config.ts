@@ -21,11 +21,11 @@ export default defineConfig(() => ({
         }
       },
       build: {
+        manifest: true,
         rollupOptions: {
           output: {
             manualChunks: {
               supabase: ['@supabase/supabase-js'],
-              charts: ['recharts'],
             },
           },
         },

@@ -1,9 +1,14 @@
 import React, { useState, useRef } from 'react';
 import { ArchiveRestore, Calculator, ChevronRight, LogOut, Edit2, Check, X, Camera, Moon, ToggleLeft, ToggleRight, Shield, Download, UserRound, ShieldAlert } from 'lucide-react';
 
-import { AccountSecurityModal } from './AccountSecurityModal';
 import { APP_DISCLAIMER, APP_NAME } from '../lib/brand';
 import { openExternalUrl, PUBLIC_LINKS } from '../lib/publicLinks';
+import { createDeferredComponent } from './DeferredComponent';
+
+const AccountSecurityModal = createDeferredComponent(
+  () => import('./AccountSecurityModal').then(({ AccountSecurityModal: component }) => component),
+  { label: '账号安全', kind: 'modal' },
+);
 
 interface MenuItem {
   icon: React.ElementType;
@@ -240,12 +245,14 @@ export const Profile: React.FC<ProfileProps> = ({
         </div>
       </div>
 
-      <AccountSecurityModal 
-        isOpen={showSecurityModal}
-        onClose={() => setShowSecurityModal(false)}
-        onAccountDeleted={onLogout}
-        email={email}
-      />
+      {showSecurityModal && (
+        <AccountSecurityModal
+          isOpen
+          onClose={() => setShowSecurityModal(false)}
+          onAccountDeleted={onLogout}
+          email={email}
+        />
+      )}
 
       {/* Logout Confirmation Modal */}
       {showLogoutConfirm && (

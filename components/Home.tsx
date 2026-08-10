@@ -1,14 +1,25 @@
 import React from 'react';
 import { ShoppingBag, Truck, Package, ArrowDownRight, ArrowUpRight, ChevronRight, Clock, Sparkles, UserRound, RefreshCw, Loader2, Warehouse as WarehouseIcon, Plus } from 'lucide-react';
 import { Activity, Warehouse } from '../types';
-import { InventoryStatsModal } from './InventoryStatsModal';
-import { AIManagementModal } from './AIManagementModal';
 import { getActivityGrossAmount, getActivityQuantity } from '../lib/inventoryMetrics';
 import { formatProductSize } from '../lib/productNormalization';
 import { ProductImage } from './ProductImage';
-import { ActivityLedgerModal } from './ActivityLedgerModal';
 import { getActivityTypeLabel } from '../lib/activityPresentation';
 import type { InventoryAnalytics } from '../lib/inventoryMetrics';
+import { createDeferredComponent } from './DeferredComponent';
+
+const InventoryStatsModal = createDeferredComponent(
+  () => import('./InventoryStatsModal').then(({ InventoryStatsModal: component }) => component),
+  { label: '库存摘要', kind: 'modal' },
+);
+const AIManagementModal = createDeferredComponent(
+  () => import('./AIManagementModal').then(({ AIManagementModal: component }) => component),
+  { label: 'AI 助手', kind: 'modal' },
+);
+const ActivityLedgerModal = createDeferredComponent(
+  () => import('./ActivityLedgerModal').then(({ ActivityLedgerModal: component }) => component),
+  { label: '完整流水账本', kind: 'modal' },
+);
 
 interface HomeProps {
   userId: string;
@@ -225,24 +236,30 @@ export const Home: React.FC<HomeProps> = ({
       </div>
 
       {/* Inventory Stats Modal */}
-      <InventoryStatsModal 
-        isOpen={showInventoryModal}
-        onClose={() => setShowInventoryModal(false)} 
-        analytics={analytics}
-      />
+      {showInventoryModal && (
+        <InventoryStatsModal
+          isOpen
+          onClose={() => setShowInventoryModal(false)}
+          analytics={analytics}
+        />
+      )}
 
-      <AIManagementModal
-        isOpen={showAIModal}
-        onClose={() => setShowAIModal(false)}
-        onExecuted={onAIManageExecuted}
-      />
+      {showAIModal && (
+        <AIManagementModal
+          isOpen
+          onClose={() => setShowAIModal(false)}
+          onExecuted={onAIManageExecuted}
+        />
+      )}
 
-      <ActivityLedgerModal
-        isOpen={showActivityLedger}
-        userId={userId}
-        warehouses={warehouses}
-        onClose={() => setShowActivityLedger(false)}
-      />
+      {showActivityLedger && (
+        <ActivityLedgerModal
+          isOpen
+          userId={userId}
+          warehouses={warehouses}
+          onClose={() => setShowActivityLedger(false)}
+        />
+      )}
 
       {/* Recent Activity */}
       <div>
