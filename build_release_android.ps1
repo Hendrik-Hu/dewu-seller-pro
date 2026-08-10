@@ -21,7 +21,8 @@ $publicSite = $publicSite.TrimEnd('/')
 $env:SELLER_INVENTORY_RECOVERY_HOST = ([Uri]$publicSite).Host
 foreach ($policyPage in @(
   @{ Path = 'privacy.html'; RequiredLink = '/account-deletion.html' },
-  @{ Path = 'account-deletion.html'; RequiredLink = '/privacy.html' }
+  @{ Path = 'account-deletion.html'; RequiredLink = '/privacy.html' },
+  @{ Path = 'support.html'; RequiredLink = '/privacy.html' }
 )) {
   $page = $policyPage.Path
   $response = Invoke-WebRequest -UseBasicParsing -Uri "$publicSite/$page" -Method Get -MaximumRedirection 3 -TimeoutSec 20
@@ -48,11 +49,15 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 $env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
 $env:ANDROID_SDK_ROOT = $env:ANDROID_HOME
 
-Write-Host "1/4 Building production web assets..."
-& $nodeExe "$PSScriptRoot\node_modules\vite\bin\vite.js" build
+Write-Host "1/4 Building complete Android application assets..."
+& $nodeExe "$PSScriptRoot\scripts\build-target.mjs" android
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host "2/4 Syncing Android project..."
 & $nodeExe "$PSScriptRoot\node_modules\@capacitor\cli\bin\capacitor" sync android
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& $nodeExe "$PSScriptRoot\scripts\check-first-screen-bundle.mjs"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& $nodeExe "$PSScriptRoot\scripts\check-android-assets.mjs"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host "3/4 Building signed Release APK and AAB..."
 Push-Location "$PSScriptRoot\android"

@@ -1,18 +1,20 @@
 {
   "name": "dewu-seller-pro",
   "private": true,
-  "version": "0.20.2",
+  "version": "0.21.0",
   "type": "module",
   "scripts": {
     "dev": "node ./node_modules/vite/bin/vite.js",
-    "build": "node ./node_modules/vite/bin/vite.js build",
+    "build": "node scripts/build-target.mjs web-support && node scripts/check-web-support-build.mjs",
+    "build:android": "node scripts/build-target.mjs android",
     "preview": "node ./node_modules/vite/bin/vite.js preview",
     "check:bundle": "node scripts/check-first-screen-bundle.mjs",
+    "check:web-support": "node scripts/check-web-support-build.mjs",
     "check:android-assets": "node scripts/check-android-assets.mjs",
     "check:public-launch": "node scripts/public-launch-gate.mjs",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
-    "android:sync": "node ./node_modules/vite/bin/vite.js build && node ./node_modules/@capacitor/cli/bin/capacitor sync android"
+    "android:sync": "node scripts/build-target.mjs android && node ./node_modules/@capacitor/cli/bin/capacitor sync android"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.1",

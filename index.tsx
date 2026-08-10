@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
+import App from '@app-entry';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { recoverFromDynamicImportFailure } from './lib/chunkRecovery';
 import './index.css';

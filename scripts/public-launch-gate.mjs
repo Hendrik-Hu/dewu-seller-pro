@@ -256,7 +256,7 @@ const main = async () => {
   const fileEnv = await readSimpleEnv(path.resolve('.env.local'));
   const env = { ...fileEnv, ...process.env };
   const siteUrl = env.PUBLIC_LAUNCH_SITE_URL || env.VITE_PUBLIC_SITE_URL || '';
-  const supportUrl = env.PUBLIC_LAUNCH_SUPPORT_URL || 'https://github.com/Hendrik-Hu/dewu-seller-pro/issues';
+  const supportUrl = env.PUBLIC_LAUNCH_SUPPORT_URL || `${String(siteUrl).replace(/\/$/, '')}/support.html`;
   const projectRef = env.SUPABASE_PROJECT_REF || parseProjectRef(env.VITE_SUPABASE_URL);
   const evidencePath = path.resolve(env.PUBLIC_LAUNCH_MAIL_EVIDENCE || '.tools/evidence/public-launch-mail-evidence.json');
   const reportPath = path.resolve(env.PUBLIC_LAUNCH_REPORT || '.tools/evidence/public-launch-gate-report.json');

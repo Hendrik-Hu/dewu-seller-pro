@@ -1,6 +1,6 @@
 # 卖家库存助手
 
-个人卖家自用库存工具，非得物官方产品。项目面向移动端使用，支持商品入库、出库、仓库管理、库存统计、经营数据图表，以及通过 Supabase Edge Function 生成可确认、可追踪的 AI 分析与库存操作计划。
+个人卖家自用库存工具，非得物官方产品。库存管理产品仅通过 Android App 提供，支持商品入库、出库、仓库管理、库存统计、经营数据图表，以及通过 Supabase Edge Function 生成可确认、可追踪的 AI 分析与库存操作计划。生产 Web 仅承载 Android 使用说明、认证回跳、账号删除和政策支持页面。
 
 ## Tech Stack
 
@@ -56,7 +56,8 @@
 
 ```powershell
 npm run dev            # Start Vite dev server
-npm run build          # Build web app to dist/
+npm run build          # Build production Web support surface to dist/
+npm run build:android  # Build the complete Android-local App assets to dist/
 npm run preview        # Preview production build
 npm run typecheck      # Run TypeScript checks
 npm run android:sync   # Build and sync Capacitor Android project
@@ -66,6 +67,8 @@ npm run check:public-launch # Verify the final public-launch gate (expected to f
 ```
 
 Android 同步会校验 `VITE_PUBLIC_SITE_URL`。它必须是已验证可公开访问的 HTTPS 站点，并提供 `/privacy.html`、`/account-deletion.html` 与 `/auth/recovery`；缺失或使用本机地址时构建会停止。
+
+生产构建采用双目标：`npm run dev` 和 Android 构建使用完整 App；`npm run build` 只生成 Web 支撑面，并自动检查业务 chunk 没有进入生产 Web。不要直接调用 `vite build` 制作 Android 包，所有 Android 脚本必须通过 `scripts/build-target.mjs android`。
 
 公开发布前必须额外运行 `npm run check:public-launch`。该命令核对自有域名、Supabase 邮件配置、近期注册确认/密码恢复整链凭证、公开政策与支持入口安全头，以及 Android App Link。配置和凭证格式见 `docs/public-launch-gate.md`；当前闭测环境预期因自有域名和 Custom SMTP 整链缺失而非零退出。
 

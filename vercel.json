@@ -25,6 +25,14 @@
       "destination": "/account-deletion.html"
     },
     {
+      "source": "/support.html",
+      "destination": "/support.html"
+    },
+    {
+      "source": "/auth/account-deletion",
+      "destination": "/index.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
