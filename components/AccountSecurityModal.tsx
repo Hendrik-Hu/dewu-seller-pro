@@ -3,6 +3,8 @@ import { X, Mail, Lock, ChevronRight, Trash2, Loader2, AlertTriangle } from 'luc
 import { supabase } from '../lib/supabase';
 import { openExternalUrl, PUBLIC_LINKS } from '../lib/publicLinks';
 import { getAccountDeletionErrorMessage, validateNewPassword } from '../lib/accountSecurity';
+import { deleteAllProductPhotoDraftData } from '../services/productPhotoDrafts';
+import { clearProductImageCleanupQueue } from '../services/storageImages';
 
 interface AccountSecurityModalProps {
   isOpen: boolean;
@@ -155,6 +157,8 @@ export const AccountSecurityModal: React.FC<AccountSecurityModalProps> = ({ isOp
     if (deleteConfirmation !== '永久删除' || !deletePassword || !email) return;
     setIsLoading(true);
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const deletingUserId = sessionData.session?.user.id;
       const { error: reauthenticationError } = await supabase.auth.signInWithPassword({ email, password: deletePassword });
       if (reauthenticationError) throw new Error('当前密码不正确，账号未删除');
       const { data, error } = await supabase.functions.invoke('delete-account', {
@@ -167,6 +171,12 @@ export const AccountSecurityModal: React.FC<AccountSecurityModalProps> = ({ isOp
           try { detail = (await context.clone().json())?.error; } catch { /* keep stable retry guidance */ }
         }
         throw new Error(detail || '删除服务暂时不可用');
+      }
+      if (deletingUserId) {
+        await Promise.allSettled([
+          deleteAllProductPhotoDraftData(deletingUserId),
+          clearProductImageCleanupQueue(deletingUserId),
+        ]);
       }
       await supabase.auth.signOut({ scope: 'local' });
       onAccountDeleted();

@@ -24,6 +24,8 @@ export interface Product {
   source?: string;
   imageFile?: File;
   imageDataUrl?: string;
+  imageDraftId?: string;
+  previousImageStorageRef?: string;
 }
 
 export interface Activity {

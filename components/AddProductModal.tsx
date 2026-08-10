@@ -3,6 +3,8 @@ import { Camera, PackageCheck, Plus, Save, Trash2, Truck, X } from 'lucide-react
 import { Preferences } from '@capacitor/preferences';
 import { Product, Warehouse } from '../types';
 import { formatProductSize, normalizeBrand, normalizeSize, normalizeSku } from '../lib/productNormalization';
+import { prepareProductImage } from '../lib/productImagePipeline';
+import { deleteProductPhotoDraft, loadProductPhotoDraft, pruneProductPhotoDrafts, saveProductPhotoDraft } from '../services/productPhotoDrafts';
 import { suggestInventorySkus } from '../services/products';
 
 interface AddProductModalProps {
@@ -51,14 +53,6 @@ const createEmptyDraft = (warehouses: Warehouse[]): Partial<Product> => ({
   imageDataUrl: '',
 });
 
-const readFileAsDataUrl = (file: File) =>
-  new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-
 export const AddProductModal: React.FC<AddProductModalProps> = ({
   isOpen,
   onClose,
@@ -71,6 +65,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   const [productData, setProductData] = useState<Partial<Product>>(createEmptyDraft(warehouses));
   const [additionalVariants, setAdditionalVariants] = useState<AdditionalVariant[]>([]);
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState('');
+  const [photoProcessing, setPhotoProcessing] = useState(false);
   const [showSkuSuggestions, setShowSkuSuggestions] = useState(false);
   const [skuSuggestions, setSkuSuggestions] = useState<Product[]>([]);
   const [skuSuggestionsLoading, setSkuSuggestionsLoading] = useState(false);
@@ -78,21 +74,45 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   const latestSuggestionRequest = useRef(0);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const skuInputRef = useRef<HTMLInputElement>(null);
+  const photoPreviewUrlRef = useRef('');
+  const draftHydratedRef = useRef(false);
+  const photoRequestIdRef = useRef(0);
+
+  const replacePhotoPreviewUrl = (next: string) => {
+    if (photoPreviewUrlRef.current.startsWith('blob:')) URL.revokeObjectURL(photoPreviewUrlRef.current);
+    photoPreviewUrlRef.current = next;
+    setPhotoPreviewUrl(next);
+  };
+
+  useEffect(() => () => {
+    if (photoPreviewUrlRef.current.startsWith('blob:')) URL.revokeObjectURL(photoPreviewUrlRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) return;
+    photoRequestIdRef.current += 1;
+    setSelectedImageFile(null);
+    setPhotoProcessing(false);
+    replacePhotoPreviewUrl('');
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
 
     if (initialData) {
+      draftHydratedRef.current = true;
       setProductData({
         ...initialData,
         source: initialData.source || '',
         imageDataUrl: '',
       });
       setSelectedImageFile(null);
+      replacePhotoPreviewUrl('');
       setAdditionalVariants([]);
       return;
     }
 
+    draftHydratedRef.current = false;
     let isMounted = true;
     const loadDraft = async () => {
       try {
@@ -111,6 +131,24 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
               : getInitialWarehouseName(warehouses),
           });
           setAdditionalVariants(restoredVariants);
+          try {
+            const persistedPhotoDraftId = parsed.imageDraftId || parsed.id;
+            const restoredPhoto = await loadProductPhotoDraft(userId, persistedPhotoDraftId);
+            if (!isMounted) return;
+            if (restoredPhoto) {
+              setSelectedImageFile(restoredPhoto);
+              replacePhotoPreviewUrl(URL.createObjectURL(restoredPhoto));
+            } else {
+              setSelectedImageFile(null);
+              replacePhotoPreviewUrl('');
+            }
+            pruneProductPhotoDrafts(userId, persistedPhotoDraftId ? [persistedPhotoDraftId] : []).catch(() => {});
+          } catch (photoError) {
+            console.warn('Failed to restore the saved photo draft.', photoError);
+            setSelectedImageFile(null);
+            replacePhotoPreviewUrl('');
+          }
+          draftHydratedRef.current = true;
           return;
         }
       } catch (error) {
@@ -120,6 +158,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       if (isMounted) {
         setProductData(createEmptyDraft(warehouses));
         setAdditionalVariants([]);
+        replacePhotoPreviewUrl('');
+        draftHydratedRef.current = true;
       }
     };
 
@@ -132,7 +172,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   }, [isOpen, initialData, userId, warehouses]);
 
   useEffect(() => {
-    if (!isOpen || initialData) return;
+    if (!isOpen || initialData || !draftHydratedRef.current) return;
 
     Preferences.set({
       key: getDraftKey(userId),
@@ -143,7 +183,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   }, [additionalVariants, initialData, isOpen, productData, userId]);
 
   useEffect(() => {
-    if (!isOpen || initialData) return;
+    if (!isOpen || initialData || !draftHydratedRef.current) return;
 
     const persistDraft = () => {
       Preferences.set({
@@ -205,7 +245,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
     return () => window.clearTimeout(timer);
   }, [initialData, isOpen, productData.sku, userId]);
 
-  const previewImage = productData.imageDataUrl || productData.imageUrl;
+  const previewImage = photoPreviewUrl || productData.imageUrl;
 
   const updateProductData = (updates: Partial<Product>) => {
     setProductData((prev) => ({ ...prev, ...updates }));
@@ -216,8 +256,9 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       sku: product.sku,
       name: productData.name || product.name,
       brand: productData.brand || product.brand,
-      imageUrl: productData.imageDataUrl ? productData.imageUrl : (productData.imageUrl || product.imageUrl),
-      imageStorageRef: productData.imageDataUrl ? productData.imageStorageRef : (productData.imageStorageRef || product.imageStorageRef),
+      imageUrl: selectedImageFile ? productData.imageUrl : (productData.imageUrl || product.imageUrl),
+      imageStorageRef: selectedImageFile ? productData.imageStorageRef : (productData.imageStorageRef || product.imageStorageRef),
+      previousImageStorageRef: product.imageStorageRef || productData.previousImageStorageRef,
     });
     setShowSkuSuggestions(false);
   };
@@ -225,19 +266,26 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   const handlePhotoChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    const requestId = ++photoRequestIdRef.current;
 
     try {
-      const dataUrl = await readFileAsDataUrl(file);
-      setSelectedImageFile(file);
+      setPhotoProcessing(true);
+      const preparedFile = await prepareProductImage(file);
+      const photoDraftId = productData.imageDraftId || productData.id || createDraftId();
+      if (!initialData) await saveProductPhotoDraft(userId, photoDraftId, preparedFile);
+      if (requestId !== photoRequestIdRef.current) return;
+      setSelectedImageFile(preparedFile);
+      replacePhotoPreviewUrl(URL.createObjectURL(preparedFile));
       updateProductData({
-        imageDataUrl: dataUrl,
-        imageUrl: '',
-        imageStorageRef: undefined,
+        imageDataUrl: '',
+        imageDraftId: initialData ? undefined : photoDraftId,
+        previousImageStorageRef: productData.imageStorageRef || productData.previousImageStorageRef,
       });
     } catch (error) {
-      console.error('Failed to read photo', error);
-      alert('读取照片失败，请重试。');
+      console.error('Failed to prepare photo', error);
+      alert(error instanceof Error ? error.message : '读取照片失败，请重试。');
     } finally {
+      if (requestId === photoRequestIdRef.current) setPhotoProcessing(false);
       event.target.value = '';
     }
   };
@@ -264,6 +312,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
         imageStorageRef: productData.imageStorageRef || initialData.imageStorageRef,
         imageDataUrl: productData.imageDataUrl || '',
         imageFile: selectedImageFile || undefined,
+        previousImageStorageRef: productData.previousImageStorageRef || initialData.imageStorageRef,
       };
       try {
         await onSave(editedProduct);
@@ -350,6 +399,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       imageStorageRef: productData.imageStorageRef,
       imageDataUrl: productData.imageDataUrl || '',
       imageFile: selectedImageFile || undefined,
+      imageDraftId: productData.imageDraftId,
+      previousImageStorageRef: productData.previousImageStorageRef,
       status: productData.status || 'instock',
       location: productData.location || '待分配',
       warehouse: productData.warehouse || '',
@@ -368,6 +419,9 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
 
     try {
       await onSave(initialData ? product : batchProducts);
+      await deleteProductPhotoDraft(userId, productData.imageDraftId || productData.id).catch((error) => {
+        console.warn('Saved product but failed to remove the local photo draft.', error);
+      });
       await Preferences.remove({ key: getDraftKey(userId) });
     } catch (error) {
       console.error('Save operation failed', error);
@@ -403,7 +457,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
           <input
             ref={photoInputRef}
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/png,image/webp"
             capture="environment"
             className="hidden"
             onChange={handlePhotoChange}
@@ -413,25 +467,38 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-xs font-semibold text-slate-700">商品主图 <span className="text-slate-400 font-normal">选填</span></div>
-                <div className="text-[11px] text-slate-400 mt-1">{initialData ? '名称、品牌和主图同步到同货号全部尺码；库位与来源仅修改当前仓库变体。' : '可直接拍照。若同货号已存在，最后一次拍摄的图片会覆盖为该商品主图。'}</div>
+                <div className="text-[11px] text-slate-400 mt-1">{initialData ? '名称、品牌和主图同步到同货号全部尺码；库位与来源仅修改当前仓库变体。' : '支持 JPEG、PNG、WebP，原图不超过 20 MB；照片会压缩并随草稿恢复。'}</div>
               </div>
               <button
                 type="button"
                 onClick={() => photoInputRef.current?.click()}
-                className="shrink-0 flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-medium text-white active:scale-95 transition-transform"
+                disabled={photoProcessing}
+                className="shrink-0 flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-medium text-white active:scale-95 transition-transform disabled:opacity-50"
               >
                 <Camera size={16} />
-                拍照
+                {photoProcessing ? '处理中' : '拍照'}
               </button>
             </div>
             {previewImage ? (
               <div className="mt-3 relative">
                 <img src={previewImage} alt="商品预览" className="h-32 w-full rounded-xl object-cover bg-slate-200" />
+                {photoPreviewUrl && (
+                  <span className="absolute bottom-2 left-2 rounded-md bg-black/60 px-2 py-1 text-[10px] text-white">
+                    已压缩 · 草稿可恢复
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={() => {
                     setSelectedImageFile(null);
-                    updateProductData({ imageDataUrl: '', imageUrl: '' });
+                    replacePhotoPreviewUrl('');
+                    deleteProductPhotoDraft(userId, productData.imageDraftId || productData.id).catch(() => {});
+                    updateProductData({
+                      imageDataUrl: '',
+                      imageDraftId: undefined,
+                      imageStorageRef: productData.previousImageStorageRef || productData.imageStorageRef,
+                      previousImageStorageRef: undefined,
+                    });
                   }}
                   className="absolute top-2 right-2 rounded-full bg-black/55 p-1 text-white"
                 >
@@ -676,6 +743,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
 
             <button
               onClick={handleSave}
+              disabled={photoProcessing}
               className="flex-1 bg-slate-900 text-white font-medium py-3 rounded-xl flex items-center justify-center space-x-2 active:scale-95 transition-all shadow-lg shadow-slate-200"
             >
               <Save size={18} />

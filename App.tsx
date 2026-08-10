@@ -28,7 +28,13 @@ import { Capacitor } from '@capacitor/core';
 import { parseRecoveryUrl } from './lib/authRecovery';
 import { SystemBars } from './lib/systemBars';
 import { normalizeProduct } from './lib/productNormalization';
-import { createProductImageRef, isProductImageRef, removeProductImageRef } from './services/storageImages';
+import {
+  enqueueProductImageCleanup,
+  isProductImageRef,
+  processProductImageCleanupQueue,
+  removeProductImageRefIfUnreferenced,
+  uploadImmutableProductImage,
+} from './services/storageImages';
 import { createWarehouse, deleteWarehouse, listWarehouses, renameWarehouse, setDefaultWarehouse } from './services/warehouses';
 import { countOrphanWarehouseProducts } from './services/dataHealth';
 
@@ -288,36 +294,40 @@ export default function App() {
     setRefreshTrigger(0);
   }, [session?.user?.id]);
 
-  const dataUrlToFile = async (dataUrl: string, fileName: string) => {
-    const response = await fetch(dataUrl);
-    const blob = await response.blob();
-    return new File([blob], fileName, { type: blob.type || 'image/jpeg' });
-  };
-
   const uploadProductImage = async (userId: string, product: Product) => {
-    let file = product.imageFile;
-
-    if (!file && product.imageDataUrl?.startsWith('data:')) {
-      const ext = product.imageDataUrl.match(/^data:image\/(\w+)/)?.[1] || 'jpg';
-      file = await dataUrlToFile(product.imageDataUrl, `${product.sku || 'product'}-${Date.now()}.${ext}`);
-    }
-
+    const file = product.imageFile;
     if (!file) {
       return product.imageStorageRef || product.imageUrl;
     }
+    return uploadImmutableProductImage(userId, product.sku, file);
+  };
 
-    const ext = file.name.split('.').pop() || 'jpg';
-    const safeSku = (product.sku || 'product').replace(/[^a-zA-Z0-9_-]/g, '_');
-    const safeProductId = (product.id || 'draft').replace(/[^a-zA-Z0-9_-]/g, '_');
-    const path = `${userId}/products/${safeSku}/${safeProductId}.${ext}`;
+  const registerUploadedImageReceipt = async (userId: string, imageRef: string) => {
+    try {
+      await enqueueProductImageCleanup(userId, imageRef);
+    } catch (queueError) {
+      try {
+        await removeProductImageRefIfUnreferenced(userId, imageRef);
+      } catch (cleanupError) {
+        console.warn('The uploaded image receipt and immediate cleanup both failed.', cleanupError);
+      }
+      throw new Error('图片已上传，但设备无法建立安全回收记录；已停止本次保存，请重试');
+    }
+  };
 
-    const { error: uploadError } = await supabase.storage
-      .from('product-images')
-      .upload(path, file, { upsert: true });
-
-    if (uploadError) throw uploadError;
-
-    return createProductImageRef(path);
+  const cleanupCommittedPreviousImage = async (userId: string, imageRef?: string) => {
+    if (!imageRef) return;
+    try {
+      await enqueueProductImageCleanup(userId, imageRef);
+      await processProductImageCleanupQueue(userId);
+    } catch (error) {
+      console.warn('Previous product image cleanup was deferred.', error);
+      try {
+        await removeProductImageRefIfUnreferenced(userId, imageRef);
+      } catch (cleanupError) {
+        console.warn('Previous product image remains preserved for a later cleanup.', cleanupError);
+      }
+    }
   };
 
   // Fetch Warehouses
@@ -344,6 +354,9 @@ export default function App() {
   useEffect(() => {
     if (session) {
       fetchWarehouses();
+      processProductImageCleanupQueue(session.user.id).catch((error) => {
+        console.warn('Deferred product image cleanup remains queued.', error);
+      });
     }
   }, [session]);
 
@@ -384,7 +397,12 @@ export default function App() {
           throw new Error('负库存异常不能通过普通入库修改，请先到“我的 - 数据体检”核对修正');
         }
         const normalizedProducts = productInput.map(normalizeProduct);
+        const hasNewImage = Boolean(normalizedProducts[0].imageFile);
+        const previousImageRef = normalizedProducts[0].previousImageStorageRef || normalizedProducts[0].imageStorageRef;
         const uploadedImageUrl = await uploadProductImage(session.user.id, normalizedProducts[0]);
+        if (hasNewImage && isProductImageRef(uploadedImageUrl)) {
+          await registerUploadedImageReceipt(session.user.id, uploadedImageUrl);
+        }
         const productsToSave = normalizedProducts.map((product) => ({
           ...product,
           imageUrl: uploadedImageUrl || product.imageUrl || '',
@@ -393,7 +411,21 @@ export default function App() {
           imageFile: undefined,
         }));
 
-        await batchInboundProducts(productsToSave, session.user.id);
+        try {
+          await batchInboundProducts(productsToSave, session.user.id);
+        } catch (batchError) {
+          if (hasNewImage && isProductImageRef(uploadedImageUrl)) {
+            await enqueueProductImageCleanup(session.user.id, uploadedImageUrl).catch(() => {});
+            await processProductImageCleanupQueue(session.user.id).catch(() => {});
+          }
+          throw batchError;
+        }
+        if (hasNewImage) {
+          await processProductImageCleanupQueue(session.user.id).catch(() => {});
+        }
+        if (hasNewImage && previousImageRef && previousImageRef !== uploadedImageUrl) {
+          void cleanupCommittedPreviousImage(session.user.id, previousImageRef);
+        }
         await fetchData();
         setRefreshTrigger((previous) => previous + 1);
         setShowAddModal(false);
@@ -412,19 +444,26 @@ export default function App() {
         throw new Error('该记录存在负库存异常，只能通过数据体检修正');
       }
       if (!session?.user?.id) return;
-      const hasNewImage = Boolean(product.imageFile || product.imageDataUrl?.startsWith('data:'));
+      const hasNewImage = Boolean(product.imageFile);
+      const previousImageRef = product.previousImageStorageRef || editingProduct.imageStorageRef;
       const uploadedImageRef = hasNewImage ? await uploadProductImage(session.user.id, product) : undefined;
+      if (hasNewImage && isProductImageRef(uploadedImageRef)) {
+        await registerUploadedImageReceipt(session.user.id, uploadedImageRef);
+      }
       try {
         await updateProductMetadata(product, session.user.id, uploadedImageRef);
       } catch (metadataError) {
         if (hasNewImage && isProductImageRef(uploadedImageRef)) {
-          try {
-            await removeProductImageRef(uploadedImageRef);
-          } catch (cleanupError) {
-            console.warn('Metadata update failed and the new image could not be removed.', cleanupError);
-          }
+          await enqueueProductImageCleanup(session.user.id, uploadedImageRef).catch(() => {});
+          await processProductImageCleanupQueue(session.user.id).catch(() => {});
         }
         throw metadataError;
+      }
+      if (hasNewImage) {
+        await processProductImageCleanupQueue(session.user.id).catch(() => {});
+      }
+      if (hasNewImage && previousImageRef && previousImageRef !== uploadedImageRef) {
+        void cleanupCommittedPreviousImage(session.user.id, previousImageRef);
       }
 
       await fetchData();
