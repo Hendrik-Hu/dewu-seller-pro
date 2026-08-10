@@ -29,6 +29,8 @@ import { createWarehouse, deleteWarehouse, listWarehouses, renameWarehouse, setD
 import { countOrphanWarehouseProducts } from './services/dataHealth';
 import { clearPendingFirstWarehouseCreation } from './services/firstWarehouseCreation';
 import { createEmptySupportDiagnosticState, recordDiagnosticDomainResult } from './lib/supportDiagnostics';
+import { prepareAvatarImage } from './lib/avatarImagePipeline';
+import { removeOwnedAvatar, uploadImmutableAvatar } from './services/avatarImages';
 
 const ProductList = createDeferredComponent(
   () => import('./components/ProductList').then(({ ProductList: component }) => component),
@@ -247,31 +249,19 @@ export default function App() {
   const updateProfile = async (updates: { name?: string; avatar?: string; avatarFile?: File }) => {
     if (!session?.user?.id) return;
 
+    const previousProfile = { ...userProfile };
     let newAvatarUrl = updates.avatar ?? userProfile.avatar;
+    let uploadedAvatar: Awaited<ReturnType<typeof uploadImmutableAvatar>> | null = null;
 
     // Handle File Upload
     if (updates.avatarFile) {
       try {
-        const file = updates.avatarFile;
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${session.user.id}/${Date.now()}.${fileExt}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from('avatars')
-          .upload(fileName, file, {
-            upsert: true
-          });
-
-        if (uploadError) throw uploadError;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('avatars')
-          .getPublicUrl(fileName);
-          
-        newAvatarUrl = publicUrl;
+        const prepared = await prepareAvatarImage(updates.avatarFile);
+        uploadedAvatar = await uploadImmutableAvatar(session.user.id, prepared);
+        newAvatarUrl = uploadedAvatar.publicUrl;
       } catch (error: any) {
         console.error('Error uploading avatar:', error);
-        alert('头像上传失败 (请确保已创建 avatars 存储桶并设为公开): ' + error.message);
+        alert(`头像处理或上传失败：${error.message || '请换一张图片重试'}`);
         return;
       }
     }
@@ -294,9 +284,18 @@ export default function App() {
         });
 
       if (error) throw error;
+      if (uploadedAvatar && userProfile.avatar && userProfile.avatar !== newAvatarUrl) {
+        void removeOwnedAvatar(session.user.id, userProfile.avatar)
+          .catch((cleanupError) => console.warn('Previous avatar cleanup was deferred.', cleanupError));
+      }
     } catch (error: any) {
       console.error('Error updating profile:', error);
-      alert('个人信息同步失败');
+      if (uploadedAvatar?.created) {
+        void removeOwnedAvatar(session.user.id, uploadedAvatar.path)
+          .catch((cleanupError) => console.warn('Uncommitted avatar cleanup was deferred.', cleanupError));
+      }
+      setUserProfile(previousProfile);
+      alert('个人信息同步失败，原头像保持不变');
     }
   };
 

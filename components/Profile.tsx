@@ -135,7 +135,7 @@ export const Profile: React.FC<ProfileProps> = ({
         ref={fileInputRef} 
         onChange={handleFileChange} 
         className="hidden" 
-        accept="image/*"
+        accept="image/jpeg,image/png,image/webp"
       />
 
       {/* Header Profile */}
