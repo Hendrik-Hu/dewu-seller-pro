@@ -22,7 +22,7 @@ export const fetchAllPages = async <T>(
     if (page.error) throw page.error;
     if (expectedCount === null) expectedCount = page.count;
     if (page.count !== null && expectedCount !== null && page.count !== expectedCount) {
-      throw new Error(`${label}在导出期间发生变化，请重新导出`);
+      throw new Error(`${label}在读取期间发生变化，请重新读取`);
     }
     const pageRows = page.data || [];
     rows.push(...pageRows);
@@ -30,11 +30,11 @@ export const fetchAllPages = async <T>(
   }
 
   if (expectedCount !== null && rows.length !== expectedCount) {
-    throw new Error(`${label}导出不完整：应有 ${expectedCount} 条，实际读取 ${rows.length} 条`);
+    throw new Error(`${label}数据读取不完整：应有 ${expectedCount} 条，实际读取 ${rows.length} 条`);
   }
   if (getKey) {
     const keys = rows.map(getKey);
-    if (new Set(keys).size !== keys.length) throw new Error(`${label}分页出现重复记录，请重新导出`);
+    if (new Set(keys).size !== keys.length) throw new Error(`${label}分页出现重复记录，请重新读取`);
   }
   return rows;
 };

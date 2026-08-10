@@ -1,4 +1,5 @@
 import type { Activity, Product } from '../types';
+import { normalizeBrand } from './productNormalization.ts';
 
 const isValidDate = (value?: string) => {
   if (!value) return false;
@@ -131,13 +132,24 @@ export const buildInventoryAnalytics = (
 
   const topBrandsMap = new Map<string, number>();
   inStockProducts.forEach((product) => {
-    const brand = product.brand || '其他';
+    const brand = normalizeBrand(product.brand);
     topBrandsMap.set(brand, (topBrandsMap.get(brand) || 0) + (Number(product.stock) || 0));
   });
 
-  const topProductsMap = new Map<string, number>();
+  const topProductsMap = new Map<string, { name: string; sku: string; sold: number; latest: number }>();
   outboundActivities.forEach((activity) => {
-    topProductsMap.set(activity.productName, (topProductsMap.get(activity.productName) || 0) + getActivityQuantity(activity));
+    const sku = String(activity.sku || '').trim().toUpperCase() || '(无货号)';
+    const timestamp = getActivityDate(activity)?.getTime() || 0;
+    const existing = topProductsMap.get(sku);
+    if (existing) {
+      existing.sold += getActivityQuantity(activity);
+      if (timestamp > existing.latest) {
+        existing.name = activity.productName || sku;
+        existing.latest = timestamp;
+      }
+      return;
+    }
+    topProductsMap.set(sku, { name: activity.productName || sku, sku, sold: getActivityQuantity(activity), latest: timestamp });
   });
 
   const topStockProductsMap = new Map<string, { name: string; sku: string; stock: number }>();
@@ -162,6 +174,8 @@ export const buildInventoryAnalytics = (
     },
     dashboard: {
       pendingOrderCount: pendingProducts.length,
+      totalSkuCount: new Set(inStockProducts.map((product) => String(product.sku || '').trim().toUpperCase()).filter(Boolean)).size,
+      totalVariantCount: inStockProducts.length,
       todaySalesAmount,
       todaySalesCount,
       todayInboundCount,
@@ -198,8 +212,8 @@ export const buildInventoryAnalytics = (
         .map(([name, value]) => ({ name, value }))
         .sort((a, b) => b.value - a.value)
         .slice(0, 5),
-      topProducts: Array.from(topProductsMap.entries())
-        .map(([name, sold]) => ({ name, sold }))
+      topProducts: Array.from(topProductsMap.values())
+        .map(({ name, sku, sold }) => ({ name, sku, sold }))
         .sort((a, b) => b.sold - a.sold)
         .slice(0, 5),
       topStockProducts: Array.from(topStockProductsMap.values())
@@ -209,3 +223,5 @@ export const buildInventoryAnalytics = (
     pendingProducts,
   };
 };
+
+export type InventoryAnalytics = ReturnType<typeof buildInventoryAnalytics>;

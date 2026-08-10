@@ -1,6 +1,6 @@
 import React from 'react';
-import { ShoppingBag, Truck, Package, ArrowDownRight, ArrowUpRight, ChevronRight, Clock, Sparkles, UserRound } from 'lucide-react';
-import { Activity, Product, Warehouse } from '../types';
+import { ShoppingBag, Truck, Package, ArrowDownRight, ArrowUpRight, ChevronRight, Clock, Sparkles, UserRound, RefreshCw, Loader2 } from 'lucide-react';
+import { Activity, Warehouse } from '../types';
 import { InventoryStatsModal } from './InventoryStatsModal';
 import { AIManagementModal } from './AIManagementModal';
 import { getActivityGrossAmount, getActivityQuantity } from '../lib/inventoryMetrics';
@@ -8,6 +8,7 @@ import { formatProductSize } from '../lib/productNormalization';
 import { ProductImage } from './ProductImage';
 import { ActivityLedgerModal } from './ActivityLedgerModal';
 import { getActivityTypeLabel } from '../lib/activityPresentation';
+import type { InventoryAnalytics } from '../lib/inventoryMetrics';
 
 interface HomeProps {
   userId: string;
@@ -23,7 +24,12 @@ interface HomeProps {
   pendingOrderCount: number;
   todaySalesAmount: number;
   todaySalesCount: number;
-  products: Product[];
+  analytics: InventoryAnalytics;
+  analyticsReady: boolean;
+  analyticsError?: string;
+  recentActivitiesReady: boolean;
+  recentActivitiesError?: string;
+  onRetryData: () => void;
   onAIManageExecuted?: () => void;
 }
 
@@ -41,7 +47,12 @@ export const Home: React.FC<HomeProps> = ({
   pendingOrderCount,
   todaySalesAmount,
   todaySalesCount,
-  products,
+  analytics,
+  analyticsReady,
+  analyticsError,
+  recentActivitiesReady,
+  recentActivitiesError,
+  onRetryData,
   onAIManageExecuted
 }) => {
   // Inventory Modal State
@@ -76,6 +87,16 @@ export const Home: React.FC<HomeProps> = ({
         </button>
       </div>
 
+      {!analyticsReady && !analyticsError && (
+        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">正在同步库存与经营摘要...</div>
+      )}
+      {analyticsError && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
+          <span>{analyticsReady ? '数据刷新失败，当前显示上次成功结果，可能已过期。' : '库存与经营摘要同步失败，请重试。'}</span>
+          <button type="button" onClick={onRetryData} className="flex shrink-0 items-center gap-1 font-semibold"><RefreshCw size={12} />重试</button>
+        </div>
+      )}
+
       {/* Quick Stats Cards */}
       <div className="grid grid-cols-2 gap-3">
         {/* Sales Card */}
@@ -90,7 +111,7 @@ export const Home: React.FC<HomeProps> = ({
           <div className="space-y-2">
             <div>
               <div className="flex items-baseline space-x-1">
-                <span className="text-[30px] leading-none font-bold">¥ {todaySalesAmount.toLocaleString()}</span>
+                <span className="text-[30px] leading-none font-bold">{analyticsReady ? `¥ ${todaySalesAmount.toLocaleString()}` : '—'}</span>
               </div>
               <div className="text-dewu-50 text-[11px] opacity-90 mt-1">今日销售额</div>
             </div>
@@ -99,7 +120,7 @@ export const Home: React.FC<HomeProps> = ({
             
             <div className="flex items-baseline justify-between">
               <span className="text-dewu-50 text-[11px] opacity-90">销售件数</span>
-              <span className="text-xl leading-none font-bold">{todaySalesCount} <span className="text-[11px] font-normal opacity-80">件</span></span>
+              <span className="text-xl leading-none font-bold">{analyticsReady ? todaySalesCount : '—'} <span className="text-[11px] font-normal opacity-80">件</span></span>
             </div>
           </div>
         </div>
@@ -116,7 +137,7 @@ export const Home: React.FC<HomeProps> = ({
             <ChevronRight size={14} className="text-slate-300 dark:text-zinc-600 group-hover:text-slate-400" />
           </div>
           <div className="space-y-1.5">
-            <div className="text-[42px] leading-none font-bold text-slate-900 dark:text-white">{pendingOrderCount}</div>
+            <div className="text-[42px] leading-none font-bold text-slate-900 dark:text-white">{analyticsReady ? pendingOrderCount : '—'}</div>
             <div className="text-slate-400 dark:text-zinc-500 text-[11px]">待发货商品</div>
           </div>
         </button>
@@ -142,6 +163,7 @@ export const Home: React.FC<HomeProps> = ({
           {/* Inventory Button - Trigger Modal */}
           <button 
             onClick={() => setShowInventoryModal(true)} 
+            disabled={!analyticsReady}
             className="flex flex-col items-center space-y-2 active:opacity-60 transition-opacity"
           >
             <div className="bg-purple-50 dark:bg-purple-900/20 p-3 rounded-xl">
@@ -167,7 +189,7 @@ export const Home: React.FC<HomeProps> = ({
       <InventoryStatsModal 
         isOpen={showInventoryModal}
         onClose={() => setShowInventoryModal(false)} 
-        products={products}
+        analytics={analytics}
       />
 
       <AIManagementModal
@@ -192,7 +214,22 @@ export const Home: React.FC<HomeProps> = ({
           </button>
         </div>
         <div className="space-y-3">
-          {activities.length === 0 ? (
+          {recentActivitiesReady && recentActivitiesError && (
+            <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
+              <span>最近动态刷新失败，当前显示上次成功结果，可能已过期。</span>
+              <button type="button" onClick={onRetryData} className="shrink-0 font-semibold">重试</button>
+            </div>
+          )}
+          {!recentActivitiesReady && !recentActivitiesError ? (
+            <div className="flex items-center justify-center gap-2 rounded-2xl border border-slate-100 bg-white px-4 py-8 text-xs text-slate-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-500">
+              <Loader2 size={14} className="animate-spin" />正在同步最近动态...
+            </div>
+          ) : !recentActivitiesReady && recentActivitiesError ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-5 text-center text-xs text-rose-600 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-300">
+              <p>最近动态加载失败，没有用空数据替代。</p>
+              <button type="button" onClick={onRetryData} className="mt-2 inline-flex items-center gap-1 font-semibold"><RefreshCw size={12} />重新加载</button>
+            </div>
+          ) : activities.length === 0 ? (
             <div className="text-center py-8 text-slate-400 text-xs bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800">
               暂无动态
             </div>

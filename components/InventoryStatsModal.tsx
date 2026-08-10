@@ -1,18 +1,16 @@
 import React from 'react';
 import { X, Boxes, BarChart3, AlertCircle } from 'lucide-react';
-import { Product } from '../types';
-import { buildInventoryAnalytics } from '../lib/inventoryMetrics';
+import type { InventoryAnalytics } from '../lib/inventoryMetrics';
 
 interface InventoryStatsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  products: Product[];
+  analytics: InventoryAnalytics;
 }
 
-export const InventoryStatsModal: React.FC<InventoryStatsModalProps> = ({ isOpen, onClose, products }) => {
+export const InventoryStatsModal: React.FC<InventoryStatsModalProps> = ({ isOpen, onClose, analytics }) => {
   if (!isOpen) return null;
 
-  const analytics = buildInventoryAnalytics(products, []);
   const totalStock = analytics.dashboard.totalStock;
   const topBrands = analytics.charts.topBrands.map(({ name, value }) => ({ name, count: value }));
   const topStockProducts = analytics.charts.topStockProducts;

@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ArrowRightLeft, Search, Plus, Boxes, CircleDollarSign, Warehouse as WarehouseIcon, ChevronDown, ChevronLeft, ChevronRight, Check, MapPin, Trash2, Edit, X, Loader2, Star, CheckCircle2, Circle, Scale } from 'lucide-react';
 import { Product, Warehouse } from '../types';
 import { supabase } from '../lib/supabase';
-import { listProducts } from '../services/products';
+import { listProducts, searchProductGroups } from '../services/products';
+import { getInventoryWarehouseSummary } from '../services/analytics';
 import { formatProductSize, normalizeSize, normalizeSku } from '../lib/productNormalization';
 import { ProductImage } from './ProductImage';
 
@@ -15,6 +16,9 @@ interface ProductListProps {
   onDeleteProduct: (productId: string) => void;
   onBatchDeleteProducts: (productIds: string[]) => Promise<void>;
   warehouses: Warehouse[];
+  warehousesReady: boolean;
+  warehousesError?: string;
+  onRetryWarehouses: () => void;
   onRenameWarehouse: (id: string, oldName: string, newName: string) => Promise<void>;
   onSetDefaultWarehouse: (id: string) => Promise<void>;
   onAddWarehouse: (name: string) => Promise<Warehouse>;
@@ -44,7 +48,7 @@ interface AggregatedProductGroup {
   sizeRows: AggregatedSizeRow[];
 }
 
-export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, onEditProduct, onAdjustProduct, onTransferProduct, onDeleteProduct, onBatchDeleteProducts, warehouses, onRenameWarehouse, onSetDefaultWarehouse, onAddWarehouse, onDeleteWarehouse, refreshTrigger }) => {
+export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, onEditProduct, onAdjustProduct, onTransferProduct, onDeleteProduct, onBatchDeleteProducts, warehouses, warehousesReady, warehousesError, onRetryWarehouses, onRenameWarehouse, onSetDefaultWarehouse, onAddWarehouse, onDeleteWarehouse, refreshTrigger }) => {
   const MAX_WAREHOUSES = 6;
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -71,6 +75,12 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [isBatchDeleting, setIsBatchDeleting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+  const [searchInventoryStock, setSearchInventoryStock] = useState(0);
+  const [loadError, setLoadError] = useState('');
+  const [retryNonce, setRetryNonce] = useState(0);
+  const latestRequest = useRef(0);
+  const latestStatsRequest = useRef(0);
   const [aggregatedActionVariants, setAggregatedActionVariants] = useState<Product[] | null>(null);
   
   // Update current warehouse if default changes or initial load
@@ -102,12 +112,18 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
   // Fetch Products from Backend
   const fetchProducts = async () => {
     if (!userId || !currentWarehouse) {
+      latestRequest.current += 1;
       setProducts([]);
       setTotalCount(0);
+      setSearchInventoryStock(0);
+      setLoadError('');
+      setIsLoading(false);
       return;
     }
 
+    const requestId = ++latestRequest.current;
     setIsLoading(true);
+    setLoadError('');
     try {
         const statusMap: Record<string, Product['status'] | undefined> = {
             all: undefined,
@@ -117,28 +133,53 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
             '瑕疵': 'flaw',
         };
 
-        const page = await listProducts({
-            userId,
+        if (debouncedSearchQuery.trim()) {
+          const matches = await searchProductGroups({
             warehouse: currentWarehouse,
             status: statusMap[filter] || undefined,
-            search: searchQuery,
+            search: debouncedSearchQuery,
             page: currentPage,
-            pageSize: ITEMS_PER_PAGE,
-        });
-
-        setProducts(page.products);
-        setTotalCount(page.totalCount);
+            pageSize: 20,
+          });
+          if (requestId !== latestRequest.current) return;
+          setProducts(matches.products);
+          setTotalCount(matches.groupCount);
+          setSearchInventoryStock(matches.inventoryStock);
+        } else {
+          const page = await listProducts({
+              userId,
+              warehouse: currentWarehouse,
+              status: statusMap[filter] || undefined,
+              page: currentPage,
+              pageSize: ITEMS_PER_PAGE,
+          });
+          if (requestId !== latestRequest.current) return;
+          setProducts(page.products);
+          setTotalCount(page.totalCount);
+          setSearchInventoryStock(0);
+        }
     } catch (error) {
         console.error('Error fetching products:', error);
+        if (requestId === latestRequest.current) {
+          setLoadError((error as any)?.message || '库存数据加载失败，请重试');
+        }
     } finally {
-        setIsLoading(false);
+        if (requestId === latestRequest.current) setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    latestRequest.current += 1;
+    setIsLoading(true);
+    setLoadError('');
+    const timer = window.setTimeout(() => setDebouncedSearchQuery(searchQuery.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery]);
 
   // Effect to trigger fetch
   useEffect(() => {
     fetchProducts();
-  }, [userId, currentPage, currentWarehouse, filter, searchQuery, refreshTrigger]);
+  }, [userId, currentPage, currentWarehouse, filter, debouncedSearchQuery, refreshTrigger, retryNonce]);
 
   // Long press handling
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -300,61 +341,44 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
     warehouseCount: 0,
     warehouseValue: 0,
   });
+  const [inventoryStatsReady, setInventoryStatsReady] = useState(false);
+  const [inventoryStatsWarehouse, setInventoryStatsWarehouse] = useState('');
+  const [inventoryStatsError, setInventoryStatsError] = useState('');
+  const [inventoryStatsRetry, setInventoryStatsRetry] = useState(0);
 
   useEffect(() => {
     const fetchStats = async () => {
+        const requestId = ++latestStatsRequest.current;
         if (!userId || !currentWarehouse) {
           setInventoryStats({ totalCount: 0, totalValue: 0, warehouseCount: 0, warehouseValue: 0 });
+          setInventoryStatsReady(false);
+          setInventoryStatsError('');
           return;
         }
 
-        const { data } = await supabase
-            .from('products')
-            .select('price, stock, warehouse')
-            .eq('user_id', userId)
-            .is('deleted_at', null)
-            .eq('status', 'instock')
-            .gte('stock', 0);
-        
-        if (data) {
-            const totals = data.reduce((acc, curr) => {
-              const stock = Number(curr.stock) || 0;
-              const price = Number(curr.price) || 0;
-              const value = price * stock;
-
-              acc.totalCount += stock;
-              acc.totalValue += value;
-
-              if (curr.warehouse === currentWarehouse) {
-                acc.warehouseCount += stock;
-                acc.warehouseValue += value;
-              }
-
-              return acc;
-            }, {
-              totalCount: 0,
-              totalValue: 0,
-              warehouseCount: 0,
-              warehouseValue: 0,
-            });
-
-            setInventoryStats(totals);
-        } else {
-            setInventoryStats({
-              totalCount: 0,
-              totalValue: 0,
-              warehouseCount: 0,
-              warehouseValue: 0,
-            });
+        setInventoryStatsError('');
+        try {
+          const nextStats = await getInventoryWarehouseSummary(currentWarehouse);
+          if (requestId !== latestStatsRequest.current) return;
+          setInventoryStats(nextStats);
+          setInventoryStatsReady(true);
+          setInventoryStatsWarehouse(currentWarehouse);
+        } catch (error) {
+          console.error('Warehouse summary fetch error:', error);
+          if (requestId !== latestStatsRequest.current) return;
+          setInventoryStatsError((error as any)?.message || '仓库摘要加载失败');
         }
     };
-    fetchStats();
-  }, [userId, currentWarehouse, refreshTrigger]);
+    void fetchStats();
+  }, [userId, currentWarehouse, refreshTrigger, inventoryStatsRetry]);
 
-  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+  const trimmedSearchQuery = searchQuery.trim();
+  const searchPending = trimmedSearchQuery !== debouncedSearchQuery;
+  const hasCurrentInventoryStats = inventoryStatsReady && inventoryStatsWarehouse === currentWarehouse;
+  const totalPages = Math.ceil(totalCount / (debouncedSearchQuery ? 20 : ITEMS_PER_PAGE));
   const selectedOnPageCount = products.filter((product) => selectedProductIds.includes(product.id)).length;
   const allVisibleSelected = products.length > 0 && selectedOnPageCount === products.length;
-  const isSearchGroupingMode = searchQuery.trim().length > 0 && !isSelectionMode;
+  const isSearchGroupingMode = debouncedSearchQuery.length > 0 && !isSelectionMode;
   const canAddMoreWarehouses = warehouses.length < MAX_WAREHOUSES;
 
   const aggregatedSearchResults = useMemo<AggregatedProductGroup[]>(() => {
@@ -454,11 +478,6 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
     }));
   }, [products, isSearchGroupingMode]);
 
-  const aggregatedSearchStockCount = useMemo(
-    () => aggregatedSearchResults.reduce((sum, group) => sum + group.totalStock, 0),
-    [aggregatedSearchResults],
-  );
-
   const formatCost = (value: number) => {
     const rounded = Number(value.toFixed(2));
     return Number.isInteger(rounded) ? `${rounded}` : rounded.toFixed(2);
@@ -509,15 +528,17 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
             <div className="relative">
               <button 
                 onClick={() => {
+                  if (!warehousesReady) return;
                   const nextOpen = !showWarehouseMenu;
                   setShowWarehouseMenu(nextOpen);
                   if (warehouses.length === 0) setShowAddWarehouseForm(nextOpen);
                 }}
                 aria-label={warehouses.length === 0 ? '添加仓库' : '选择仓库'}
+                disabled={!warehousesReady}
                 title={warehouses.length === 0 ? '添加仓库' : '选择仓库'}
-                className={warehouses.length === 0
+                className={`${warehouses.length === 0
                   ? "flex h-9 w-9 items-center justify-center rounded-full border border-dashed border-dewu-300 bg-white text-dewu-600 shadow-sm dark:border-dewu-700 dark:bg-zinc-900 dark:text-dewu-400"
-                  : "flex items-center space-x-1.5 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 pl-3 pr-2 py-1.5 rounded-full text-xs font-bold text-slate-700 dark:text-zinc-200 shadow-sm active:bg-slate-50 dark:active:bg-zinc-800 transition-colors"}
+                  : "flex items-center space-x-1.5 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 pl-3 pr-2 py-1.5 rounded-full text-xs font-bold text-slate-700 dark:text-zinc-200 shadow-sm active:bg-slate-50 dark:active:bg-zinc-800 transition-colors"} disabled:cursor-not-allowed disabled:opacity-40`}
               >
                   {warehouses.length === 0 ? <Plus size={17} /> : <>
                     <WarehouseIcon size={12} className="text-slate-400 dark:text-zinc-500" />
@@ -676,8 +697,20 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
               )}
             </div>
         </div>
+        {warehousesReady && warehousesError && (
+          <div className="mb-3 flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
+            <span>仓库列表刷新失败，当前显示上次成功结果，可能已过期。</span>
+            <button type="button" onClick={onRetryWarehouses} className="shrink-0 font-semibold">重试</button>
+          </div>
+        )}
         
         {/* Inventory Overview */}
+        {inventoryStatsError && (
+          <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
+            <span>{hasCurrentInventoryStats ? '仓库摘要刷新失败，当前显示上次成功结果。' : '仓库摘要加载失败，暂不显示为 0。'}</span>
+            <button type="button" onClick={() => setInventoryStatsRetry((value) => value + 1)} className="shrink-0 font-semibold">重试</button>
+          </div>
+        )}
         <div className="mb-3 grid grid-cols-2 gap-2 rounded-xl bg-slate-900 p-2 text-white shadow-lg shadow-slate-200/70 dark:bg-zinc-900 dark:shadow-none">
           {[
             {
@@ -686,8 +719,8 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
               label: '总库存数',
               value: (
                 <>
-                  {inventoryStats.totalCount}
-                  <span className="ml-1 text-[11px] font-normal opacity-60">件</span>
+                  {hasCurrentInventoryStats ? inventoryStats.totalCount : '—'}
+                  {hasCurrentInventoryStats && <span className="ml-1 text-[11px] font-normal opacity-60">件</span>}
                 </>
               ),
             },
@@ -695,7 +728,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
               key: 'total-value',
               icon: CircleDollarSign,
               label: '预估总值',
-              value: formatCompactCurrency(inventoryStats.totalValue),
+              value: hasCurrentInventoryStats ? formatCompactCurrency(inventoryStats.totalValue) : '—',
             },
             {
               key: 'warehouse-count',
@@ -703,8 +736,8 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
               label: '该仓库库存数',
               value: (
                 <>
-                  {inventoryStats.warehouseCount}
-                  <span className="ml-1 text-[11px] font-normal opacity-60">件</span>
+                  {hasCurrentInventoryStats ? inventoryStats.warehouseCount : '—'}
+                  {hasCurrentInventoryStats && <span className="ml-1 text-[11px] font-normal opacity-60">件</span>}
                 </>
               ),
             },
@@ -712,7 +745,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
               key: 'warehouse-value',
               icon: CircleDollarSign,
               label: '该仓库预估总值',
-              value: formatCompactCurrency(inventoryStats.warehouseValue),
+              value: hasCurrentInventoryStats ? formatCompactCurrency(inventoryStats.warehouseValue) : '—',
             },
           ].map((stat) => {
             const Icon = stat.icon;
@@ -817,22 +850,36 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
 
       {/* Product List */}
       <div className="flex-1 overflow-y-auto px-5 py-2 pb-28 space-y-2">
-        {isLoading ? (
+        {searchPending || isLoading ? (
             <div className="flex flex-col items-center justify-center py-20 text-slate-400 dark:text-zinc-500">
                 <Loader2 className="w-8 h-8 animate-spin mb-2 text-dewu-500" />
-                <span className="text-xs">加载数据中...</span>
+                <span className="text-xs">{searchPending ? '正在更新搜索结果...' : '加载数据中...'}</span>
             </div>
+        ) : loadError ? (
+          <div className="mx-auto mt-12 max-w-xs rounded-xl border border-rose-200 bg-rose-50 p-4 text-center dark:border-rose-900/50 dark:bg-rose-950/20">
+            <p className="text-xs text-rose-600 dark:text-rose-300">{loadError}</p>
+            <button type="button" onClick={() => setRetryNonce((value) => value + 1)} className="mt-3 rounded-lg bg-rose-600 px-4 py-2 text-xs font-semibold text-white">重新加载</button>
+          </div>
         ) : (
             <>
                 {warehouses.length > 0 && <p className="text-[10px] text-slate-400 dark:text-zinc-500 text-center mb-1">
                   {isSelectionMode
                     ? '点击商品可勾选或取消勾选'
                     : isSearchGroupingMode
-                      ? `该搜索下共有 ${aggregatedSearchResults.length} 款商品，${aggregatedSearchStockCount} 个库存`
+                      ? `该搜索下共有 ${totalCount} 款商品，${searchInventoryStock} 个库存`
                       : `点击或长按商品进行管理 · 每页 ${ITEMS_PER_PAGE} 条 · 共 ${totalCount} 条`}
                 </p>}
                 
-                {warehouses.length === 0 ? (
+                {!warehousesReady ? (
+                    <div className="mx-auto mt-10 max-w-xs text-center">
+                      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400">
+                        {warehousesError ? <WarehouseIcon size={22} /> : <Loader2 size={22} className="animate-spin" />}
+                      </div>
+                      <h2 className="mt-3 text-sm font-semibold text-slate-900 dark:text-white">{warehousesError ? '仓库信息同步失败' : '正在同步仓库'}</h2>
+                      <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-zinc-400">{warehousesError || '正在读取仓库，请稍候。'} 未确认前不会把它当成空账号。</p>
+                      {warehousesError && <button type="button" onClick={onRetryWarehouses} className="mt-3 rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white dark:bg-white dark:text-black">重新同步</button>}
+                    </div>
+                ) : warehouses.length === 0 ? (
                     <div className="mx-auto mt-10 max-w-xs text-center">
                       <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-dewu-50 text-dewu-600 dark:bg-dewu-950/30 dark:text-dewu-400">
                         <WarehouseIcon size={22} />

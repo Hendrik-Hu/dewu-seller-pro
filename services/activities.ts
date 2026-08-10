@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabase';
 import { Activity } from '../types';
 import { mapActivityFromDb } from './mappers';
 import { resolveStorageImageUrl } from './storageImages';
+import { fetchAllPages } from './pagination';
 
 export interface ActivityPageParams {
   userId: string;
@@ -59,6 +60,7 @@ export const listActivityPage = async ({
   const from = (page - 1) * pageSize;
   const { data, error, count } = await query
     .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
     .range(from, from + pageSize - 1);
   if (error) throw error;
 
@@ -69,15 +71,20 @@ export const listActivityPage = async ({
   return { activities, totalCount: count || 0 };
 };
 export const listActivities = async (userId: string): Promise<Activity[]> => {
-  const { data, error } = await supabase
+  const rows = await fetchAllPages((from, to) => supabase
     .from('activities')
-    .select('*')
+    .select('*', { count: 'exact' })
     .eq('user_id', userId)
-    .order('created_at', { ascending: false });
-
-  if (error) throw error;
-  return Promise.all((data || []).map(async (row) => {
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .range(from, to), { getKey: (row: any) => String(row.id), label: '库存流水' });
+  return Promise.all(rows.map(async (row) => {
     const activity = mapActivityFromDb(row);
     return { ...activity, imageUrl: await resolveStorageImageUrl(activity.imageStorageRef || activity.imageUrl) };
   }));
+};
+
+export const listRecentActivities = async (userId: string, limit = 10): Promise<Activity[]> => {
+  const result = await listActivityPage({ userId, page: 1, pageSize: Math.min(Math.max(limit, 1), 50) });
+  return result.activities;
 };

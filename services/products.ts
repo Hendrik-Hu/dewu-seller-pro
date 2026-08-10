@@ -4,6 +4,7 @@ import { mapProductFromDb, mapProductToDb } from './mappers';
 import { mergeProductsWithLocalMetadata } from './productMetadata';
 import { isProductImageRef, resolveStorageImageUrl } from './storageImages';
 import { fetchAllPages } from './pagination';
+import { parseInventoryGroupSearchEnvelope } from '../lib/analyticsValidation';
 
 export interface ListProductsParams {
   userId: string;
@@ -53,6 +54,7 @@ export const listProducts = async ({
   const to = from + pageSize - 1;
   const { data, error, count } = await query
     .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
     .range(from, to);
 
   if (error) throw error;
@@ -69,19 +71,55 @@ export const listProducts = async ({
 };
 
 export const listAllProducts = async (userId: string): Promise<Product[]> => {
-  const { data, error } = await supabase
+  const data = await fetchAllPages((from, to) => supabase
     .from('products')
-    .select('*')
+    .select('*', { count: 'exact' })
     .eq('user_id', userId)
     .is('deleted_at', null)
-    .order('created_at', { ascending: false });
-
-  if (error) throw error;
-  const products = await Promise.all((data || []).map(async (row) => {
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .range(from, to), { getKey: (row: any) => String(row.id), label: '商品目录' });
+  const products = await Promise.all(data.map(async (row) => {
     const product = mapProductFromDb(row);
     return { ...product, imageUrl: await resolveStorageImageUrl(product.imageStorageRef || product.imageUrl) };
   }));
   return mergeProductsWithLocalMetadata(userId, products);
+};
+
+export interface ProductGroupSearchPage {
+  products: Product[];
+  groupCount: number;
+  inventoryStock: number;
+  rowCount: number;
+  page: number;
+  pageSize: number;
+}
+
+export const searchProductGroups = async ({
+  warehouse, status, search, page = 1, pageSize = 20,
+}: Omit<ListProductsParams, 'userId'>): Promise<ProductGroupSearchPage> => {
+  const { data, error } = await supabase.rpc('search_inventory_groups', {
+    p_warehouse: warehouse,
+    p_status: status || null,
+    p_search: search?.trim() || null,
+    p_page: page,
+    p_page_size: pageSize,
+  });
+  if (error) throw error;
+  const envelope = parseInventoryGroupSearchEnvelope(data);
+  const rows = envelope.products;
+  const products = await Promise.all(rows.map(async (row: any) => {
+    const product = mapProductFromDb(row);
+    return { ...product, imageUrl: await resolveStorageImageUrl(product.imageStorageRef || product.imageUrl) };
+  }));
+  return {
+    products,
+    groupCount: envelope.groupCount,
+    inventoryStock: envelope.inventoryStock,
+    rowCount: envelope.rowCount,
+    page: envelope.page,
+    pageSize: envelope.pageSize,
+  };
 };
 
 export const getWarehouseProductSummary = async (userId: string, warehouse: string) => {

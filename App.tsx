@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { AuthScreen } from './components/AuthScreen';
 import { BottomNav } from './components/BottomNav';
@@ -17,10 +17,10 @@ import { OutboundModal } from './components/OutboundModal';
 import { PendingOrdersModal } from './components/PendingOrdersModal';
 import { Tab, Product, Activity, Warehouse, OutboundFeeSelection } from './types';
 import { supabase } from './lib/supabase';
-import { listActivities } from './services/activities';
+import { listRecentActivities } from './services/activities';
 import { batchInboundProducts, completePendingProducts, deleteProduct, deleteProducts, listAllProducts, updateProductMetadata } from './services/products';
 import { outboundProduct } from './services/outbound';
-import { buildInventoryAnalytics } from './lib/inventoryMetrics';
+import { emptyInventoryAnalytics, getInventoryAnalytics } from './services/analytics';
 import { Loader2 } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { App as CapacitorApp } from '@capacitor/app';
@@ -43,7 +43,19 @@ export default function App() {
   // App State
   const [products, setProducts] = useState<Product[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [productsLoaded, setProductsLoaded] = useState(false);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [analytics, setAnalytics] = useState(emptyInventoryAnalytics);
+  const [analyticsReady, setAnalyticsReady] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState('');
+  const [recentActivitiesReady, setRecentActivitiesReady] = useState(false);
+  const [recentActivitiesError, setRecentActivitiesError] = useState('');
   const [refreshTrigger, setRefreshTrigger] = useState(0); // For child components to refresh data
+  const previousUserId = useRef<string | null>(null);
+  const userRequestGeneration = useRef(0);
+  const latestDataRequest = useRef(0);
+  const latestWarehouseRequest = useRef(0);
+  const latestProfileRequest = useRef(0);
 
   // Theme State
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -124,6 +136,9 @@ export default function App() {
   // Fetch Profile from Supabase
   const fetchProfile = async () => {
     if (!session?.user?.id) return;
+    const requestedUserId = session.user.id;
+    const generation = userRequestGeneration.current;
+    const requestId = ++latestProfileRequest.current;
     
     try {
       const { data, error } = await supabase
@@ -137,7 +152,7 @@ export default function App() {
         return;
       }
 
-      if (data) {
+      if (data && requestId === latestProfileRequest.current && generation === userRequestGeneration.current && requestedUserId === session?.user?.id) {
         let avatarUrl = data.avatar_url || '';
         
         // Fix for legacy data: if avatar is a blob URL (which is temporary), revert to default
@@ -234,8 +249,48 @@ export default function App() {
   
   // Warehouse State
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [warehousesReady, setWarehousesReady] = useState(false);
+  const [warehousesError, setWarehousesError] = useState('');
   const [orphanWarehouseIssueCount, setOrphanWarehouseIssueCount] = useState(0);
-  const inventoryAnalytics = buildInventoryAnalytics(products, activities);
+  const inventoryAnalytics = analytics;
+  useLayoutEffect(() => {
+    const nextUserId = session?.user?.id || null;
+    if (previousUserId.current === nextUserId) return;
+    previousUserId.current = nextUserId;
+    userRequestGeneration.current += 1;
+    latestDataRequest.current += 1;
+    latestWarehouseRequest.current += 1;
+    latestProfileRequest.current += 1;
+
+    setProducts([]);
+    setProductsLoaded(false);
+    setCatalogLoading(false);
+    setIsLoading(false);
+    setActivities([]);
+    setRecentActivitiesReady(false);
+    setRecentActivitiesError('');
+    setAnalytics(emptyInventoryAnalytics());
+    setAnalyticsReady(false);
+    setAnalyticsError('');
+    setWarehouses([]);
+    setWarehousesReady(false);
+    setWarehousesError('');
+    setOrphanWarehouseIssueCount(0);
+    setUserProfile({ name: '卖家用户', avatar: '' });
+    setEditingProduct(null);
+    setAdjustingProduct(null);
+    setTransferProductTarget(null);
+    setShowAddModal(false);
+    setShowOutboundModal(false);
+    setShowPendingModal(false);
+    setShowRecycleBin(false);
+    setShowDataHealth(false);
+    setShowBackupRestore(false);
+    setShowFeeSchemes(false);
+    setShowTransferModal(false);
+    setCurrentTab(Tab.HOME);
+    setRefreshTrigger(0);
+  }, [session?.user?.id]);
 
   const dataUrlToFile = async (dataUrl: string, fileName: string) => {
     const response = await fetch(dataUrl);
@@ -271,11 +326,22 @@ export default function App() {
 
   // Fetch Warehouses
   const fetchWarehouses = async () => {
-    if (!session?.user?.id) return;
+    if (!session?.user?.id) return false;
+    const requestedUserId = session.user.id;
+    const generation = userRequestGeneration.current;
+    const requestId = ++latestWarehouseRequest.current;
     try {
-      setWarehouses(await listWarehouses(session.user.id));
+      const nextWarehouses = await listWarehouses(requestedUserId);
+      if (requestId !== latestWarehouseRequest.current || generation !== userRequestGeneration.current || requestedUserId !== session?.user?.id) return false;
+      setWarehouses(nextWarehouses);
+      setWarehousesReady(true);
+      setWarehousesError('');
+      return true;
     } catch (error) {
       console.error('Error fetching warehouses:', error);
+      if (requestId !== latestWarehouseRequest.current || generation !== userRequestGeneration.current) return false;
+      setWarehousesError((error as any)?.message || '仓库同步失败');
+      return false;
     }
   };
 
@@ -287,9 +353,11 @@ export default function App() {
 
   const handleSetDefaultWarehouse = async (id: string) => {
     try {
-      await setDefaultWarehouse(id);
-      await fetchWarehouses();
-      alert('已设置默认仓库');
+      const updated = await setDefaultWarehouse(id);
+      setWarehouses((current) => current.map((warehouse) => ({ ...warehouse, is_default: warehouse.id === updated.id })));
+      setWarehousesReady(true);
+      const synced = await fetchWarehouses();
+      alert(synced ? '已设置默认仓库' : '默认仓库已设置，但列表刷新失败；请只重试同步，不要重复操作。');
     } catch (error: any) {
       console.error('Set default warehouse error:', error);
       alert(`设置失败：${error?.message || '请稍后重试'}`);
@@ -299,10 +367,12 @@ export default function App() {
 
   const handleRenameWarehouse = async (id: string, _oldName: string, newName: string) => {
     try {
-      await renameWarehouse(id, newName);
-      await Promise.all([fetchWarehouses(), fetchData()]);
+      const updated = await renameWarehouse(id, newName);
+      setWarehouses((current) => current.map((warehouse) => warehouse.id === id ? updated : warehouse));
+      setWarehousesReady(true);
+      const [synced] = await Promise.all([fetchWarehouses(), fetchData()]);
       setRefreshTrigger(prev => prev + 1);
-      alert('仓库名称修改成功，历史流水名称保持不变');
+      alert(synced ? '仓库名称修改成功，历史流水名称保持不变' : '仓库名称已修改，但列表刷新失败；历史流水名称保持不变，请只重试同步。');
     } catch (error: any) {
       console.error('Rename warehouse error:', error);
       alert(`修改失败：${error?.message || '请稍后重试'}`);
@@ -413,24 +483,59 @@ export default function App() {
     const trimmedName = name.trim();
     if (!trimmedName || !session?.user?.id) throw new Error('请输入仓库名称');
     const created = await createWarehouse(trimmedName);
-    await fetchWarehouses();
+    setWarehouses((current) => current.some((warehouse) => warehouse.id === created.id) ? current : [...current, created]);
+    setWarehousesReady(true);
+    const synced = await fetchWarehouses();
+    if (!synced) alert('仓库已创建，但列表刷新失败；请只重试同步，不要再次创建。');
     return created;
   };
 
   const handleDeleteWarehouse = async (id: string) => {
     await deleteWarehouse(id);
-    await fetchWarehouses();
+    setWarehouses((current) => {
+      const remaining = current.filter((warehouse) => warehouse.id !== id);
+      if (remaining.length > 0 && !remaining.some((warehouse) => warehouse.is_default)) {
+        return remaining.map((warehouse, index) => ({ ...warehouse, is_default: index === 0 }));
+      }
+      return remaining;
+    });
+    setWarehousesReady(true);
+    const synced = await fetchWarehouses();
+    if (!synced) alert('仓库已删除，但列表刷新失败；请只重试同步，不要重复删除。');
     setRefreshTrigger((value) => value + 1);
   };
 
-  const handleInboundEntry = () => {
+  const handleInboundEntry = async () => {
+    if (!warehousesReady) {
+      alert('仓库信息尚未同步成功，请先重试，避免重复创建仓库。');
+      return;
+    }
     if (warehouses.length === 0) {
       setCurrentTab(Tab.PRODUCTS);
       alert('请先在库存页点击右上角加号，创建真实仓库后再入库。');
       return;
     }
+    if (!(await ensureProductsLoaded())) return;
     setEditingProduct(null);
     setShowAddModal(true);
+  };
+
+  const handleOutboundEntry = async () => {
+    if (!warehousesReady) {
+      alert('仓库信息尚未同步成功，请先重试。');
+      return;
+    }
+    if (!(await ensureProductsLoaded())) return;
+    setShowOutboundModal(true);
+  };
+
+  const handlePendingEntry = async () => {
+    if (!warehousesReady) {
+      alert('仓库信息尚未同步成功，请先重试。');
+      return;
+    }
+    if (!(await ensureProductsLoaded())) return;
+    setShowPendingModal(true);
   };
 
   const handleBatchDeleteProducts = async (productIds: string[]) => {
@@ -494,22 +599,65 @@ export default function App() {
   // Fetch Data
   const fetchData = async () => {
     if (!session?.user?.id) return;
-    setIsLoading(true);
+    const requestedUserId = session.user.id;
+    const generation = userRequestGeneration.current;
+    const requestId = ++latestDataRequest.current;
+    if (!analyticsReady) setIsLoading(true);
+    const [analyticsResult, recentResult, orphanResult, productsResult] = await Promise.allSettled([
+      getInventoryAnalytics(),
+      listRecentActivities(requestedUserId, 10),
+      countOrphanWarehouseProducts(),
+      productsLoaded ? listAllProducts(requestedUserId) : Promise.resolve(null),
+    ]);
+    if (requestId !== latestDataRequest.current || generation !== userRequestGeneration.current || requestedUserId !== session?.user?.id) return;
+
+    if (analyticsResult.status === 'fulfilled') {
+      setAnalytics(analyticsResult.value);
+      setAnalyticsReady(true);
+      setAnalyticsError('');
+    } else {
+      console.error('Analytics fetch error:', analyticsResult.reason);
+      setAnalyticsError(analyticsResult.reason?.message || '库存与经营摘要同步失败');
+    }
+    if (recentResult.status === 'fulfilled') {
+      setActivities(recentResult.value);
+      setRecentActivitiesReady(true);
+      setRecentActivitiesError('');
+    } else {
+      console.error('Recent activities fetch error:', recentResult.reason);
+      setRecentActivitiesError(recentResult.reason?.message || '最近动态加载失败');
+    }
+    if (orphanResult.status === 'fulfilled') setOrphanWarehouseIssueCount(orphanResult.value);
+    if (productsResult.status === 'fulfilled' && productsResult.value) {
+      setProducts(productsResult.value);
+    } else if (productsResult.status === 'rejected') {
+      console.error('Product catalog refresh error:', productsResult.reason);
+      setProductsLoaded(false);
+    }
+    setIsLoading(false);
+  };
+
+  const ensureProductsLoaded = async (force = false) => {
+    if (!session?.user?.id) return false;
+    const requestedUserId = session.user.id;
+    const generation = userRequestGeneration.current;
+    if (productsLoaded && !force) return true;
+    setCatalogLoading(true);
     try {
-      const [productsData, typedActivities, orphanCount] = await Promise.all([
-        listAllProducts(session.user.id),
-        listActivities(session.user.id),
-        countOrphanWarehouseProducts(),
-      ]);
-
-      setProducts(productsData || []);
-      setActivities(typedActivities || []);
-      setOrphanWarehouseIssueCount(orphanCount);
-
-    } catch (error) {
-      console.error('Fetch data error:', error);
+      const data = await listAllProducts(requestedUserId);
+      if (generation !== userRequestGeneration.current || requestedUserId !== session?.user?.id) return false;
+      setProducts(data);
+      setProductsLoaded(true);
+      return true;
+    } catch (error: any) {
+      if (generation !== userRequestGeneration.current || requestedUserId !== session?.user?.id) return false;
+      console.error('Product catalog fetch error:', error);
+      alert(`完整商品目录加载失败，尚未打开操作窗口：${error?.message || '请重试'}`);
+      return false;
     } finally {
-      setIsLoading(false);
+      if (generation === userRequestGeneration.current && requestedUserId === session?.user?.id) {
+        setCatalogLoading(false);
+      }
     }
   };
 
@@ -529,7 +677,7 @@ export default function App() {
   };
 
   // Render loading state if session exists but data/warehouses are loading
-  if (session && isLoading && products.length === 0 && warehouses.length === 0) {
+  if (session && isLoading && !analyticsReady && warehouses.length === 0) {
       return (
         <div className="h-full w-full bg-slate-50 dark:bg-black flex flex-col items-center justify-center">
            <Loader2 className="w-8 h-8 animate-spin mb-2 text-dewu-500" />
@@ -539,15 +687,6 @@ export default function App() {
   }
 
   const renderContent = () => {
-    if (isLoading && products.length === 0) {
-      return (
-        <div className="h-full flex flex-col items-center justify-center text-slate-400">
-          <Loader2 className="w-8 h-8 animate-spin mb-2 text-dewu-500" />
-          <span className="text-xs">同步云端数据中...</span>
-        </div>
-      );
-    }
-
     switch (currentTab) {
       case Tab.HOME:
         return (
@@ -557,14 +696,19 @@ export default function App() {
             username={userProfile.name}
             avatarUrl={userProfile.avatar}
             onInboundClick={handleInboundEntry}
-            onOutboundClick={() => setShowOutboundModal(true)}
-            onPendingClick={() => setShowPendingModal(true)}
+            onOutboundClick={handleOutboundEntry}
+            onPendingClick={handlePendingEntry}
             activities={activities}
             pendingOrderCount={inventoryAnalytics.dashboard.pendingOrderCount}
             todaySalesAmount={inventoryAnalytics.dashboard.todaySalesAmount}
             todaySalesCount={inventoryAnalytics.dashboard.todaySalesCount}
             onAvatarClick={() => setCurrentTab(Tab.ME)}
-            products={products}
+            analytics={inventoryAnalytics}
+            analyticsReady={analyticsReady}
+            analyticsError={analyticsError}
+            recentActivitiesReady={recentActivitiesReady}
+            recentActivitiesError={recentActivitiesError}
+            onRetryData={fetchData}
             onAIManageExecuted={() => {
               fetchData();
               setRefreshTrigger(prev => prev + 1);
@@ -585,6 +729,9 @@ export default function App() {
             onDeleteProduct={handleDeleteProduct}
             onBatchDeleteProducts={handleBatchDeleteProducts}
             warehouses={warehouses}
+            warehousesReady={warehousesReady}
+            warehousesError={warehousesError}
+            onRetryWarehouses={fetchWarehouses}
             onRenameWarehouse={handleRenameWarehouse}
             onSetDefaultWarehouse={handleSetDefaultWarehouse}
             onAddWarehouse={handleAddWarehouse}
@@ -595,8 +742,10 @@ export default function App() {
       case Tab.STATS:
         return (
           <Stats
-            products={products}
-            activities={activities}
+            analytics={inventoryAnalytics}
+            analyticsReady={analyticsReady}
+            analyticsError={analyticsError}
+            onRetryData={fetchData}
             onAIExecuted={() => {
               fetchData();
               setRefreshTrigger(prev => prev + 1);
@@ -633,14 +782,19 @@ export default function App() {
             username={userProfile.name}
             avatarUrl={userProfile.avatar}
             onInboundClick={handleInboundEntry}
-            onOutboundClick={() => setShowOutboundModal(true)}
-            onPendingClick={() => setShowPendingModal(true)}
+            onOutboundClick={handleOutboundEntry}
+            onPendingClick={handlePendingEntry}
             activities={activities}
             pendingOrderCount={inventoryAnalytics.dashboard.pendingOrderCount}
             todaySalesAmount={inventoryAnalytics.dashboard.todaySalesAmount}
             todaySalesCount={inventoryAnalytics.dashboard.todaySalesCount}
             onAvatarClick={() => setCurrentTab(Tab.ME)}
-            products={products}
+            analytics={inventoryAnalytics}
+            analyticsReady={analyticsReady}
+            analyticsError={analyticsError}
+            recentActivitiesReady={recentActivitiesReady}
+            recentActivitiesError={recentActivitiesError}
+            onRetryData={fetchData}
             onAIManageExecuted={() => {
               fetchData();
               setRefreshTrigger(prev => prev + 1);
@@ -673,6 +827,11 @@ export default function App() {
               {renderContent()}
             </main>
             <BottomNav currentTab={currentTab} onTabChange={setCurrentTab} />
+            {catalogLoading && (
+              <div className="absolute inset-x-4 bottom-24 z-[65] flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-xs font-medium text-white shadow-xl dark:bg-zinc-800">
+                <Loader2 size={16} className="animate-spin" />正在完整读取商品目录，完成前不会显示空列表
+              </div>
+            )}
             
             {/* Modals rendered at root level */}
             <AddProductModal 

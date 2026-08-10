@@ -2,12 +2,13 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { readHostedApiKey } from "../_shared/apiKeys.ts";
 import { evaluateExplicitExecutionIntent, requiresWarehouseSetup } from "../_shared/aiIntent.ts";
-import { buildAiInventorySummary, formatAiInventorySummaryAnswer } from "../_shared/aiInventorySummary.ts";
+import { formatAiInventorySummaryAnswer } from "../_shared/aiInventorySummary.ts";
 import { isExecutablePlan } from "../_shared/aiPlanPolicy.ts";
 import { serializeAiContext } from "../_shared/aiContext.ts";
 import { parseBasicInventoryCommand } from "../_shared/aiFallbackParsing.ts";
 import { getTrustedAiInboundImageUrl } from "../_shared/aiMediaPolicy.ts";
 import { buildDeterministicInventoryAnswer } from "../_shared/aiQueryResponse.ts";
+import { extractSkuCandidates, parseAuthoritativeAnalyticsSummary } from "../_shared/authoritativeAnalytics.ts";
 import { resolveAiInboundProductName } from "../_shared/aiMasterDataPolicy.ts";
 
 const corsHeaders = {
@@ -197,70 +198,77 @@ const loadAllRows = async (
   configure?: (query: any) => any,
 ) => {
   const rows: any[] = [];
+  const seenIds = new Set<string>();
+  let expectedCount: number | null = null;
   const pageSize = 1000;
 
   for (let offset = 0; ; offset += pageSize) {
     let query = db
       .from(table)
-      .select(select)
+      .select(select, { count: "exact" })
       .eq("user_id", userId)
       .range(offset, offset + pageSize - 1);
     if (configure) query = configure(query);
 
-    const { data, error } = await query;
+    const { data, error, count } = await query;
     if (error) throw error;
+    if (!Number.isInteger(count) || Number(count) < 0) throw new Error(`${table} row count is unavailable`);
+    if (expectedCount === null) expectedCount = Number(count);
+    if (expectedCount !== Number(count)) throw new Error(`${table} changed while context was loading`);
     const page = Array.isArray(data) ? data : [];
+    for (const row of page) {
+      const id = toText(row?.id);
+      if (id && seenIds.has(id)) throw new Error(`${table} returned duplicate rows`);
+      if (id) seenIds.add(id);
+    }
     rows.push(...page);
     if (page.length < pageSize) break;
   }
 
+  if (rows.length !== expectedCount) throw new Error(`${table} context is incomplete`);
+
   return rows;
 };
 
-const loadAuthoritativeContext = async (db: any, userId: string, message = "") => {
-  const [products, warehouses, activities, feeSchemes] = await Promise.all([
-    loadAllRows(
-      db,
+const loadAuthoritativeContext = async (userDb: any, userId: string, message = "") => {
+  const skuCandidates = extractSkuCandidates(message);
+
+  const [products, analyticsResult, warehouses, feeSchemes] = await Promise.all([
+    skuCandidates.length > 0 ? loadAllRows(
+      userDb,
       "products",
       "id,sku,name,brand,size,stock,price,warehouse,location,image_url,source,status,created_at",
       userId,
-      (query) => query.is("deleted_at", null).order("created_at", { ascending: false }),
-    ),
+      (query) => query
+        .is("deleted_at", null)
+        .in("sku", skuCandidates)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false }),
+    ) : Promise.resolve([]),
+    userDb.rpc("get_inventory_analytics", {}),
     loadAllRows(
-      db,
+      userDb,
       "warehouses",
       "id,name,is_default,created_at",
       userId,
-      (query) => query.order("created_at", { ascending: true }),
+      (query) => query.order("created_at", { ascending: true }).order("id", { ascending: true }),
     ),
     loadAllRows(
-      db,
-      "activities",
-      "type,sku,size,count,price,cost,warehouse,created_at",
-      userId,
-      (query) => query.order("created_at", { ascending: false }),
-    ),
-    loadAllRows(
-      db,
+      userDb,
       "fee_schemes",
       "id,name,sale_mode,category,percent_rate,percent_min,percent_max,percentage_unit,fixed_fee,fixed_fee_unit,shipping_fee,shipping_fee_unit,other_fee,other_fee_unit,effective_from,is_default,updated_at",
       userId,
-      (query) => query.lte("effective_from", new Date().toISOString()).order("is_default", { ascending: false }).order("effective_from", { ascending: false }),
+      (query) => query.lte("effective_from", new Date().toISOString()).order("is_default", { ascending: false }).order("effective_from", { ascending: false }).order("id", { ascending: false }),
     ),
   ]);
-
-  const normalizedMessage = message.toUpperCase();
-  const relevantProducts = products.filter((item) => {
-    const sku = normalizeSku(item.sku);
-    return sku && normalizedMessage.includes(sku);
-  });
+  if (analyticsResult.error) throw analyticsResult.error;
 
   return {
     products,
     warehouses,
     feeSchemes,
-    relevantProducts,
-    summary: buildAiInventorySummary(products, activities),
+    relevantProducts: products,
+    summary: parseAuthoritativeAnalyticsSummary(analyticsResult.data),
   };
 };
 
@@ -807,7 +815,7 @@ const executeOutbound = async (db: any, userDb: any, userId: string, input: Reco
     .eq("user_id", userId)
     .is("deleted_at", null)
     .eq("status", "instock")
-    .ilike("sku", sku)
+    .eq("sku", sku)
     .gt("stock", 0)
     .order("created_at", { ascending: false })
     .limit(50);
@@ -883,7 +891,7 @@ serve(async (req) => {
     const db = createClient(supabaseUrl, serviceRoleKey);
 
     if (!confirm) {
-      const context = await loadAuthoritativeContext(db, authData.user.id, message);
+      const context = await loadAuthoritativeContext(authClient, authData.user.id, message);
       const deterministicAnswer = buildDeterministicInventoryAnswer(message, context);
       if (deterministicAnswer) {
         return jsonResponse({
@@ -1009,7 +1017,7 @@ serve(async (req) => {
       return jsonResponse({ error: "执行计划已过期，请重新生成后再确认。" }, 410);
     }
 
-    const context = await loadAuthoritativeContext(db, authData.user.id, message);
+    const context = await loadAuthoritativeContext(authClient, authData.user.id, message);
     const plannedActions = sanitizeAgentActions(envelope.actions)
       .map((action) => hydrateActionWithContext(action, context));
     if (!plannedActions.length) {

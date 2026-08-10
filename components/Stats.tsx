@@ -11,31 +11,50 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Bot, Send, Sparkles } from 'lucide-react';
-import { Activity, Product } from '../types';
+import { Bot, RefreshCw, Send, Sparkles } from 'lucide-react';
 import { AIManagementModal } from './AIManagementModal';
-import { buildInventoryAnalytics } from '../lib/inventoryMetrics';
+import type { InventoryAnalytics } from '../lib/inventoryMetrics';
 
 interface StatsProps {
-  products: Product[];
-  activities: Activity[];
+  analytics: InventoryAnalytics;
+  analyticsReady: boolean;
+  analyticsError?: string;
+  onRetryData: () => void;
   onAIExecuted?: () => void;
 }
 
 const COLORS = ['#14b8a6', '#0f766e', '#0d9488', '#ccfbf7'];
 
-export const Stats: React.FC<StatsProps> = ({ products, activities, onAIExecuted }) => {
+export const Stats: React.FC<StatsProps> = ({ analytics, analyticsReady, analyticsError, onRetryData, onAIExecuted }) => {
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
-  const analytics = buildInventoryAnalytics(products, activities);
   const monthly = analytics.monthly;
   const salesChartData = analytics.charts.salesTrend;
   const brandData = analytics.charts.topBrands;
   const topProducts = analytics.charts.topProducts;
   const hasMissingCosts = monthly.missingCostCount > 0;
 
+  if (!analyticsReady) {
+    return (
+      <div className="px-5 py-6 pb-24 h-full overflow-y-auto bg-slate-50 dark:bg-black">
+        <h1 className="mb-6 text-xl font-bold text-slate-900 dark:text-white">数据统计</h1>
+        <div className={`rounded-xl border px-4 py-5 text-sm ${analyticsError ? 'border-rose-200 bg-rose-50 text-rose-600 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-300' : 'border-slate-200 bg-white text-slate-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400'}`}>
+          <p>{analyticsError ? '统计同步失败，未用 0 代替真实数据。' : '正在同步服务端权威统计...'}</p>
+          {analyticsError && <button type="button" onClick={onRetryData} className="mt-3 inline-flex items-center gap-1 font-semibold"><RefreshCw size={14} />重新加载</button>}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="px-5 py-6 pb-24 h-full overflow-y-auto bg-slate-50 dark:bg-black transition-colors duration-300">
       <h1 className="text-xl font-bold text-slate-900 dark:text-white mb-6">数据统计</h1>
+
+      {analyticsError && (
+        <div className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-[11px] text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
+          <span>{analyticsReady ? '统计刷新失败，当前显示上次成功结果，可能已过期。' : '统计同步失败，暂不显示为 0。'}</span>
+          <button type="button" onClick={onRetryData} className="flex shrink-0 items-center gap-1 font-semibold"><RefreshCw size={12} />重试</button>
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-3 mb-6">
         <div className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-slate-100 dark:border-zinc-800 shadow-sm flex flex-col justify-between min-h-[80px]">
@@ -199,14 +218,17 @@ export const Stats: React.FC<StatsProps> = ({ products, activities, onAIExecuted
         <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-4">历史热销排行 TOP 5</h3>
         <div className="space-y-4">
           {topProducts.map((item, idx) => (
-            <div key={`${item.name}-${idx}`} className="flex items-center space-x-3">
+            <div key={item.sku || `${item.name}-${idx}`} className="flex items-center space-x-3">
               <span className={`w-5 h-5 flex items-center justify-center rounded text-[10px] font-bold text-white ${idx < 3 ? 'bg-slate-900 dark:bg-zinc-700' : 'bg-slate-300 dark:bg-zinc-800'}`}>
                 {idx + 1}
               </span>
               <div className="flex-1">
-                <div className="flex justify-between mb-1">
-                  <span className="text-xs font-medium text-slate-700 dark:text-zinc-300 truncate max-w-[150px]">{item.name}</span>
-                  <span className="text-xs text-slate-400 dark:text-zinc-500">{item.sold} 件</span>
+                <div className="mb-1 flex min-w-0 items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-xs font-medium text-slate-700 dark:text-zinc-300">{item.name}</div>
+                    <div className="truncate text-[10px] text-slate-400 dark:text-zinc-500">货号 {item.sku || '未记录'}</div>
+                  </div>
+                  <span className="shrink-0 text-xs text-slate-400 dark:text-zinc-500">{item.sold} 件</span>
                 </div>
                 <div className="h-1.5 w-full bg-slate-100 dark:bg-black rounded-full overflow-hidden">
                   <div
