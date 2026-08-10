@@ -28,6 +28,7 @@ import {
 import { createWarehouse, deleteWarehouse, listWarehouses, renameWarehouse, setDefaultWarehouse } from './services/warehouses';
 import { countOrphanWarehouseProducts } from './services/dataHealth';
 import { clearPendingFirstWarehouseCreation } from './services/firstWarehouseCreation';
+import { createEmptySupportDiagnosticState, recordDiagnosticDomainResult } from './lib/supportDiagnostics';
 
 const ProductList = createDeferredComponent(
   () => import('./components/ProductList').then(({ ProductList: component }) => component),
@@ -97,6 +98,7 @@ export default function App() {
   const [analyticsError, setAnalyticsError] = useState('');
   const [recentActivitiesReady, setRecentActivitiesReady] = useState(false);
   const [recentActivitiesError, setRecentActivitiesError] = useState('');
+  const [supportDiagnosticState, setSupportDiagnosticState] = useState(createEmptySupportDiagnosticState);
   const [refreshTrigger, setRefreshTrigger] = useState(0); // For child components to refresh data
   const previousUserId = useRef<string | null>(null);
   const userRequestGeneration = useRef(0);
@@ -210,9 +212,15 @@ export default function App() {
         
       if (error && error.code !== 'PGRST116') { // PGRST116 is "Row not found"
         console.error('Error fetching profile:', error);
+        if (requestId === latestProfileRequest.current && generation === userRequestGeneration.current && requestedUserId === session?.user?.id) {
+          setSupportDiagnosticState((current) => recordDiagnosticDomainResult(current, 'profile', false));
+        }
         return;
       }
 
+      if (requestId === latestProfileRequest.current && generation === userRequestGeneration.current && requestedUserId === session?.user?.id) {
+        setSupportDiagnosticState((current) => recordDiagnosticDomainResult(current, 'profile', true));
+      }
       if (data && requestId === latestProfileRequest.current && generation === userRequestGeneration.current && requestedUserId === session?.user?.id) {
         let avatarUrl = data.avatar_url || '';
         
@@ -229,6 +237,9 @@ export default function App() {
       }
     } catch (error) {
       console.error('Fetch profile exception:', error);
+      if (requestId === latestProfileRequest.current && generation === userRequestGeneration.current && requestedUserId === session?.user?.id) {
+        setSupportDiagnosticState((current) => recordDiagnosticDomainResult(current, 'profile', false));
+      }
     }
   };
 
@@ -329,6 +340,7 @@ export default function App() {
     setActivities([]);
     setRecentActivitiesReady(false);
     setRecentActivitiesError('');
+    setSupportDiagnosticState(createEmptySupportDiagnosticState());
     setAnalytics(emptyInventoryAnalytics());
     setAnalyticsReady(false);
     setAnalyticsError('');
@@ -402,6 +414,7 @@ export default function App() {
       setWarehouses(nextWarehouses);
       setWarehousesReady(true);
       setWarehousesError('');
+      setSupportDiagnosticState((current) => recordDiagnosticDomainResult(current, 'warehouses', true));
       if (nextWarehouses.length > 0) {
         void clearPendingFirstWarehouseCreation(requestedUserId).catch(() => {});
       }
@@ -410,6 +423,7 @@ export default function App() {
       console.error('Error fetching warehouses:', error);
       if (requestId !== latestWarehouseRequest.current || generation !== userRequestGeneration.current) return false;
       setWarehousesError((error as any)?.message || '仓库同步失败');
+      setSupportDiagnosticState((current) => recordDiagnosticDomainResult(current, 'warehouses', false));
       return false;
     }
   };
@@ -730,17 +744,21 @@ export default function App() {
       setAnalytics(analyticsResult.value);
       setAnalyticsReady(true);
       setAnalyticsError('');
+      setSupportDiagnosticState((current) => recordDiagnosticDomainResult(current, 'analytics', true));
     } else {
       console.error('Analytics fetch error:', analyticsResult.reason);
       setAnalyticsError(analyticsResult.reason?.message || '库存与经营摘要同步失败');
+      setSupportDiagnosticState((current) => recordDiagnosticDomainResult(current, 'analytics', false));
     }
     if (recentResult.status === 'fulfilled') {
       setActivities(recentResult.value);
       setRecentActivitiesReady(true);
       setRecentActivitiesError('');
+      setSupportDiagnosticState((current) => recordDiagnosticDomainResult(current, 'recentActivities', true));
     } else {
       console.error('Recent activities fetch error:', recentResult.reason);
       setRecentActivitiesError(recentResult.reason?.message || '最近动态加载失败');
+      setSupportDiagnosticState((current) => recordDiagnosticDomainResult(current, 'recentActivities', false));
     }
     if (orphanResult.status === 'fulfilled') setOrphanWarehouseIssueCount(orphanResult.value);
     setIsLoading(false);
@@ -862,6 +880,7 @@ export default function App() {
             onFeeSchemesClick={() => setShowFeeSchemes(true)}
             dataIssueCount={inventoryAnalytics.dataQuality.negativeStockCount + inventoryAnalytics.dataQuality.invalidActivityCount + orphanWarehouseIssueCount}
             appVersion={__APP_VERSION__}
+            diagnosticState={supportDiagnosticState}
           />
         );
       default:

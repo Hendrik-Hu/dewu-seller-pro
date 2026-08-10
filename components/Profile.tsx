@@ -1,13 +1,18 @@
 import React, { useState, useRef } from 'react';
-import { ArchiveRestore, Calculator, ChevronRight, LogOut, Edit2, Check, X, Camera, Moon, ToggleLeft, ToggleRight, Shield, Download, UserRound, ShieldAlert } from 'lucide-react';
+import { ArchiveRestore, Calculator, ChevronRight, LogOut, Edit2, Check, X, Camera, Moon, ToggleLeft, ToggleRight, Shield, Download, UserRound, ShieldAlert, LifeBuoy } from 'lucide-react';
 
 import { APP_DISCLAIMER, APP_NAME } from '../lib/brand';
 import { openExternalUrl, PUBLIC_LINKS } from '../lib/publicLinks';
+import { SupportDiagnosticState } from '../lib/supportDiagnostics';
 import { createDeferredComponent } from './DeferredComponent';
 
 const AccountSecurityModal = createDeferredComponent(
   () => import('./AccountSecurityModal').then(({ AccountSecurityModal: component }) => component),
   { label: '账号安全', kind: 'modal' },
+);
+const SupportDiagnosticsModal = createDeferredComponent(
+  () => import('./SupportDiagnosticsModal').then(({ SupportDiagnosticsModal: component }) => component),
+  { label: '支持与安全诊断', kind: 'modal' },
 );
 
 interface MenuItem {
@@ -35,6 +40,7 @@ interface ProfileProps {
   onFeeSchemesClick: () => void;
   dataIssueCount: number;
   appVersion: string;
+  diagnosticState: SupportDiagnosticState;
 }
 
 export const Profile: React.FC<ProfileProps> = ({ 
@@ -55,12 +61,14 @@ export const Profile: React.FC<ProfileProps> = ({
   onFeeSchemesClick,
   dataIssueCount,
   appVersion,
+  diagnosticState,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(username);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showSecurityModal, setShowSecurityModal] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showSupportModal, setShowSupportModal] = useState(false);
 
   // Toggle Dark Mode
   // useEffect logic removed, controlled by parent App.tsx now
@@ -85,6 +93,7 @@ export const Profile: React.FC<ProfileProps> = ({
         action: onToggleTheme
       },
       { icon: Shield, label: '账号安全', action: () => setShowSecurityModal(true) },
+      { icon: LifeBuoy, label: '支持与诊断', action: () => setShowSupportModal(true) },
     ]
   ];
 
@@ -241,7 +250,7 @@ export const Profile: React.FC<ProfileProps> = ({
         <div className="text-center text-[10px] leading-4 text-slate-400 dark:text-zinc-600">
           <p>{APP_NAME} · Version {appVersion}</p>
           <p>{APP_DISCLAIMER}</p>
-          <div className="mt-1 flex justify-center gap-3"><button onClick={() => openExternalUrl(PUBLIC_LINKS.privacy)} className="underline">隐私说明</button><button onClick={() => openExternalUrl(PUBLIC_LINKS.accountDeletion)} className="underline">账号删除说明</button><button onClick={() => openExternalUrl(PUBLIC_LINKS.support)} className="underline">支持</button></div>
+          <div className="mt-1 flex justify-center gap-3"><button onClick={() => openExternalUrl(PUBLIC_LINKS.privacy)} className="underline">隐私说明</button><button onClick={() => openExternalUrl(PUBLIC_LINKS.accountDeletion)} className="underline">账号删除说明</button><button onClick={() => setShowSupportModal(true)} className="underline">支持与诊断</button></div>
         </div>
       </div>
 
@@ -251,6 +260,14 @@ export const Profile: React.FC<ProfileProps> = ({
           onClose={() => setShowSecurityModal(false)}
           onAccountDeleted={onLogout}
           email={email}
+        />
+      )}
+      {showSupportModal && (
+        <SupportDiagnosticsModal
+          isOpen
+          onClose={() => setShowSupportModal(false)}
+          appVersion={appVersion}
+          diagnosticState={diagnosticState}
         />
       )}
 

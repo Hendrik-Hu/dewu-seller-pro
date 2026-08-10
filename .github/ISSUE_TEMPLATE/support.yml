@@ -1,0 +1,40 @@
+name: 使用问题与故障反馈
+description: 不含账号、订单、库存或财务隐私的公开问题反馈
+title: "[支持] "
+labels:
+  - support
+body:
+  - type: markdown
+    attributes:
+      value: |
+        这是公开页面。请勿提交密码、令牌、邮箱、订单号、库存明细、仓库信息、财务数据或未经打码的截图。
+        安全漏洞请不要在这里公开，请按仓库 SECURITY.md 的私密渠道报告。
+  - type: input
+    id: version
+    attributes:
+      label: 应用版本
+      placeholder: 例如 0.19.0
+    validations:
+      required: true
+  - type: input
+    id: diagnostic_id
+    attributes:
+      label: 匿名诊断编号
+      description: 仅填写 App 支持页生成的 DIAG 编号，不要粘贴账号或邮箱。
+      placeholder: DIAG-...
+    validations:
+      required: false
+  - type: textarea
+    id: problem
+    attributes:
+      label: 问题描述
+      description: 说明操作步骤、期望结果和实际结果。请先删除所有个人与经营数据。
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 隐私确认
+      options:
+        - label: 我已确认内容不包含密码、令牌、邮箱、订单、库存、仓库、财务数据或未打码截图。
+          required: true
