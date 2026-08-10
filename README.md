@@ -81,12 +81,7 @@ public/                     PWA manifest and icon
 
 ## Supabase Notes
 
-项目根目录内的 SQL 文件记录了当前数据库结构补丁和优化步骤，例如：
-
-- `setup_storage.sql`
-- `fix_activities_rls.sql`
-- `add_platform_column.sql`
-- `add_source_column.sql`
-- `db_data_layer_optimization.sql`
+`supabase/migrations/` 是数据库结构、RLS、RPC 与存储策略的唯一权威演进路径。
+迁移必须使用新的时间戳文件追加，已经应用的迁移不得改写。不要在项目根目录新增或手工执行 SQL 补丁；数据库回归脚本仅允许放在 `supabase/tests/`，并且必须在事务中回滚。
 
 AI 库存管理逻辑位于 `supabase/functions/ai-manager`。它会鉴权当前用户，并在服务端完成计划签名、一次性确认与入库/出库执行；模型提供商密钥只配置在 Supabase 服务端。所需密钥说明见 `supabase/functions/ai-manager/README.md`。

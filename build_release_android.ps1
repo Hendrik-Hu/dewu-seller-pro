@@ -19,13 +19,17 @@ $publicSite = Require-Env "VITE_PUBLIC_SITE_URL"
 if ($publicSite -notmatch '^https://[^/]+') { throw "VITE_PUBLIC_SITE_URL must be a verified HTTPS origin." }
 $publicSite = $publicSite.TrimEnd('/')
 $env:SELLER_INVENTORY_RECOVERY_HOST = ([Uri]$publicSite).Host
-foreach ($page in @('privacy.html', 'account-deletion.html')) {
-  $response = Invoke-WebRequest -Uri "$publicSite/$page" -Method Get -MaximumRedirection 3 -TimeoutSec 20
-  if ($response.StatusCode -ne 200 -or $response.Content -notmatch '卖家库存助手') {
+foreach ($policyPage in @(
+  @{ Path = 'privacy.html'; RequiredLink = '/account-deletion.html' },
+  @{ Path = 'account-deletion.html'; RequiredLink = '/privacy.html' }
+)) {
+  $page = $policyPage.Path
+  $response = Invoke-WebRequest -UseBasicParsing -Uri "$publicSite/$page" -Method Get -MaximumRedirection 3 -TimeoutSec 20
+  if ($response.StatusCode -ne 200 -or $response.Content -notmatch [Regex]::Escape($policyPage.RequiredLink)) {
     throw "Public policy page failed verification: $publicSite/$page"
   }
 }
-$assetLinks = Invoke-WebRequest -Uri "$publicSite/.well-known/assetlinks.json" -Method Get -MaximumRedirection 0 -TimeoutSec 20
+$assetLinks = Invoke-WebRequest -UseBasicParsing -Uri "$publicSite/.well-known/assetlinks.json" -Method Get -MaximumRedirection 0 -TimeoutSec 20
 if ($assetLinks.StatusCode -ne 200 -or $assetLinks.Headers.'Content-Type' -notmatch '^application/json(?:;|$)') {
   throw "Android App Link association failed verification."
 }
