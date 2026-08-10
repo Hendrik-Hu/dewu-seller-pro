@@ -1,41 +1,39 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Truck, PackageCheck, Search, CheckCircle2, Circle, Check, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, PackageCheck, Search, Truck, X } from 'lucide-react';
 import { Product } from '../types';
 import { formatProductSize } from '../lib/productNormalization';
 import { ProductImage } from './ProductImage';
 import { listProducts } from '../services/products';
 
-interface PendingOrdersModalProps {
+interface TransitInventoryModalProps {
   isOpen: boolean;
   onClose: () => void;
   userId: string;
-  onCompletePending: (productIds: string[]) => Promise<void>;
+  onReviewArrival: (product: Product) => void;
 }
 
-export const PendingOrdersModal: React.FC<PendingOrdersModalProps> = ({ isOpen, onClose, userId, onCompletePending }) => {
+export const TransitInventoryModal: React.FC<TransitInventoryModalProps> = ({
+  isOpen, onClose, userId, onReviewArrival,
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
-  const [pendingProducts, setPendingProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [reloadToken, setReloadToken] = useState(0);
   const latestRequest = useRef(0);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
     setSearchTerm('');
     setDebouncedSearchTerm('');
-    setPendingProducts([]);
+    setProducts([]);
     setPage(1);
     setTotalCount(0);
     setLoadError('');
     setReloadToken(0);
-    setSelectedIds([]);
-    setIsSubmitting(false);
   }, [isOpen]);
 
   useEffect(() => {
@@ -61,183 +59,68 @@ export const PendingOrdersModal: React.FC<PendingOrdersModalProps> = ({ isOpen, 
       pageSize: 20,
     }).then((result) => {
       if (requestId !== latestRequest.current) return;
-      setPendingProducts(result.products);
+      setProducts(result.products);
       setTotalCount(result.totalCount);
-      setSelectedIds((current) => current.filter((id) => result.products.some((product) => product.id === id)));
     }).catch((error) => {
       if (requestId !== latestRequest.current) return;
-      setPendingProducts([]);
+      setProducts([]);
       setTotalCount(0);
-      setLoadError(error instanceof Error ? error.message : '待发货列表加载失败');
+      setLoadError(error instanceof Error ? error.message : '运输中库存加载失败');
     }).finally(() => {
       if (requestId === latestRequest.current) setLoading(false);
     });
   }, [debouncedSearchTerm, isOpen, page, reloadToken, userId]);
 
+  if (!isOpen) return null;
+
   const searchPending = searchTerm.trim() !== debouncedSearchTerm;
   const totalPages = Math.max(1, Math.ceil(totalCount / 20));
 
-  const allVisibleSelected = pendingProducts.length > 0 && pendingProducts.every((product) => selectedIds.includes(product.id));
-
-  const toggleSelection = (productId: string) => {
-    setSelectedIds((prev) => (
-      prev.includes(productId)
-        ? prev.filter((id) => id !== productId)
-        : [...prev, productId]
-    ));
-  };
-
-  const handleToggleSelectAll = () => {
-    if (allVisibleSelected) {
-      setSelectedIds((prev) => prev.filter((id) => !pendingProducts.some((product) => product.id === id)));
-      return;
-    }
-
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      pendingProducts.forEach((product) => next.add(product.id));
-      return Array.from(next);
-    });
-  };
-
-  const handleComplete = async (productIds: string[]) => {
-    if (productIds.length === 0) return;
-
-    const confirmed = window.confirm(`确认将 ${productIds.length} 个待发货商品标记为已处理吗？`);
-    if (!confirmed) return;
-
-    setIsSubmitting(true);
-    try {
-      await onCompletePending(productIds);
-      setSelectedIds((prev) => prev.filter((id) => !productIds.includes(id)));
-      setReloadToken((value) => value + 1);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-[fadeIn_0.2s_ease-out]">
-      <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
-        <div className="flex justify-between items-center p-4 border-b border-slate-100 flex-shrink-0">
-          <div className="flex items-center space-x-2">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[82vh] w-full max-w-sm flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-zinc-950">
+        <header className="flex shrink-0 items-center justify-between border-b border-slate-100 p-4 dark:border-zinc-800">
+          <div className="flex items-center gap-2">
             <Truck className="text-orange-500" size={20} />
-            <h2 className="text-lg font-bold text-slate-900">待发货商品</h2>
+            <div>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">采购运输中</h2>
+              <p className="text-[10px] text-slate-400">到仓只转为在售，卖出必须另走出库记账</p>
+            </div>
           </div>
-          <button 
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 p-1"
-          >
-            <X size={20} />
-          </button>
-        </div>
+          <button type="button" onClick={onClose} className="p-1 text-slate-400" aria-label="关闭运输中库存"><X size={20} /></button>
+        </header>
 
-        <div className="p-3 border-b border-slate-100 bg-slate-50 space-y-3">
+        <div className="space-y-2 border-b border-slate-100 bg-slate-50 p-3 dark:border-zinc-800 dark:bg-zinc-900">
           <div className="relative">
             <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="搜索货号、名称、品牌、尺码..."
-              className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-dewu-500"
-            />
+            <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="搜索货号、名称、品牌、尺码..." className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-dewu-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white" />
           </div>
+          {!loading && !searchPending && !loadError && products.length > 0 && <p className="text-[11px] text-slate-500">共 {totalCount} 个运输中库存变体</p>}
+        </div>
 
-          {!loading && !searchPending && !loadError && pendingProducts.length > 0 && (
-            <div className="flex items-center justify-between">
-              <div className="text-[11px] text-slate-500">共 {totalCount} 个 · 本页已选 {selectedIds.length} 个</div>
-              <button
-                onClick={handleToggleSelectAll}
-                className="text-[11px] font-medium text-dewu-600"
-              >
-                {allVisibleSelected ? '取消本页全选' : '全选当前页'}
-              </button>
-            </div>
-          )}
-        </div>
-        
-        <div className="overflow-y-auto p-4 space-y-3 min-h-[200px]">
-          {(loading || searchPending) ? (
-             <div className="flex items-center justify-center gap-2 py-12 text-xs text-slate-400"><Loader2 size={16} className="animate-spin" />正在同步待发货商品...</div>
+        <div className="min-h-[220px] space-y-3 overflow-y-auto p-4">
+          {loading || searchPending ? (
+            <div className="flex items-center justify-center gap-2 py-12 text-xs text-slate-400"><Loader2 size={16} className="animate-spin" />正在同步运输中商品...</div>
           ) : loadError ? (
-             <div className="flex flex-col items-center gap-3 py-12 text-center">
-               <p className="text-xs text-rose-500">待发货列表加载失败，尚未显示空结果</p>
-               <button type="button" onClick={() => setReloadToken((value) => value + 1)} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white">重试</button>
-             </div>
-          ) : pendingProducts.length === 0 ? (
-             <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-2 mt-10">
-               <PackageCheck size={48} className="text-slate-200" />
-               <span className="text-sm font-medium">暂无待发货订单</span>
-               <p className="text-xs text-slate-400">所有订单已处理完毕</p>
-             </div>
-          ) : (
-            pendingProducts.map(product => (
-              <button
-                key={product.id}
-                type="button"
-                onClick={() => toggleSelection(product.id)}
-                className="w-full flex items-center space-x-3 bg-white p-3 rounded-xl border border-slate-100 shadow-sm relative overflow-hidden text-left"
-              >
-                 <div className="absolute left-0 top-0 bottom-0 w-1 bg-orange-400"></div>
-                <div className="shrink-0 text-dewu-500">
-                  {selectedIds.includes(product.id) ? (
-                    <CheckCircle2 size={18} fill="currentColor" />
-                  ) : (
-                    <Circle size={18} className="text-slate-300" />
-                  )}
+            <div className="flex flex-col items-center gap-3 py-12 text-center"><p className="text-xs text-rose-500">运输中库存加载失败，尚未显示空结果</p><button type="button" onClick={() => setReloadToken((value) => value + 1)} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white">重试</button></div>
+          ) : products.length === 0 ? (
+            <div className="mt-10 flex h-full flex-col items-center justify-center space-y-2 text-slate-400"><PackageCheck size={48} className="text-slate-200" /><span className="text-sm font-medium">暂无运输中商品</span><p className="text-xs">这里不代表待发货订单</p></div>
+          ) : products.map((product) => (
+            <article key={product.id} className="relative flex items-center gap-3 overflow-hidden rounded-xl border border-slate-100 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+              <div className="absolute inset-y-0 left-0 w-1 bg-orange-400" />
+              <ProductImage src={product.imageUrl} alt={product.name} className="h-16 w-16 shrink-0 rounded-lg bg-slate-100 object-cover" />
+              <div className="min-w-0 flex-1">
+                <h4 className="line-clamp-2 text-xs font-bold text-slate-900 dark:text-white">{product.name}</h4>
+                <p className="mt-1 text-[10px] text-slate-400">{product.sku} · {formatProductSize(product.size)} · {product.warehouse || '未设置仓库'}</p>
+                <div className="mt-2 flex items-end justify-between gap-2">
+                  <div><p className="text-xs font-semibold text-slate-700 dark:text-zinc-200">库存 {product.stock} 件</p><p className="text-[10px] text-slate-400">平均成本 ¥{product.price.toFixed(2)}</p></div>
+                  {product.stock > 0 ? <button type="button" onClick={() => onReviewArrival(product)} className="shrink-0 rounded-lg bg-orange-50 px-2.5 py-1.5 text-[11px] font-semibold text-orange-600 dark:bg-orange-950/30 dark:text-orange-300">到仓核对</button> : <span className="text-[10px] text-rose-500">库存异常，请盘点</span>}
                 </div>
-                <ProductImage src={product.imageUrl} alt={product.name} className="w-16 h-16 rounded-lg object-cover bg-slate-100" />
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-xs font-bold text-slate-900 line-clamp-2">{product.name}</h4>
-                  <div className="flex items-center space-x-2 mt-1">
-                     <span className="bg-slate-100 text-slate-500 text-[10px] px-1.5 py-0.5 rounded">{formatProductSize(product.size)}</span>
-                     <span className="text-[10px] text-slate-400">货号: {product.sku}</span>
-                  </div>
-                  <div className="mt-1 text-[10px] text-slate-400">
-                    {product.warehouse || '未设置仓库'}{product.location ? ` · ${product.location}` : ''}
-                  </div>
-                  <div className="flex justify-between items-center mt-2">
-                     <p className="text-sm font-bold text-slate-900">¥{product.price}</p>
-                     <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          handleComplete([product.id]);
-                        }}
-                        disabled={isSubmitting}
-                        className="text-[10px] bg-orange-50 text-orange-600 px-2 py-1 rounded-full font-medium border border-orange-100 disabled:opacity-50"
-                     >
-                        标记已处理
-                     </button>
-                  </div>
-                </div>
-              </button>
-            ))
-          )}
-          {!loading && !searchPending && !loadError && totalPages > 1 && (
-            <div className="flex items-center justify-between pt-1">
-              <button type="button" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 disabled:opacity-40">上一页</button>
-              <span className="text-[11px] text-slate-400">{page}/{totalPages}</span>
-              <button type="button" disabled={page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 disabled:opacity-40">下一页</button>
-            </div>
-          )}
+              </div>
+            </article>
+          ))}
+          {!loading && !searchPending && !loadError && totalPages > 1 && <div className="flex items-center justify-between pt-1"><button type="button" disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="rounded-lg border border-slate-200 p-2 text-slate-500 disabled:opacity-40" aria-label="上一页"><ChevronLeft size={16} /></button><span className="text-[11px] text-slate-400">{page}/{totalPages}</span><button type="button" disabled={page >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} className="rounded-lg border border-slate-200 p-2 text-slate-500 disabled:opacity-40" aria-label="下一页"><ChevronRight size={16} /></button></div>}
         </div>
-        
-        {!loading && !searchPending && !loadError && pendingProducts.length > 0 && (
-          <div className="p-4 border-t border-slate-100 bg-slate-50">
-             <button
-                onClick={() => handleComplete(selectedIds)}
-                disabled={selectedIds.length === 0 || isSubmitting}
-                className="w-full bg-slate-900 text-white font-medium py-3 rounded-xl shadow-lg shadow-slate-200 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-             >
-                <Check size={16} />
-                {isSubmitting ? '处理中...' : `批量完成 (${selectedIds.length})`}
-             </button>
-          </div>
-        )}
       </div>
     </div>
   );

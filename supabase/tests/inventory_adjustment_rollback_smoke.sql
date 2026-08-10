@@ -53,12 +53,31 @@ begin
   if not v_failed then raise exception 'Missing soft-delete id was reported as success'; end if;
 
   insert into public.products(id,name,brand,size,sku,price,stock,image_url,status,location,created_at,warehouse,user_id,source)
-  values(v_pending_id,'Pending smoke','Test','43','PENDING-SMOKE',100,1,'','shipping','A2',now(),'Adjustment smoke',v_user,'smoke');
+  values(v_pending_id,'Transit smoke','Test','43','TRANSIT-SMOKE',100,1,'','shipping','A2',now(),'Adjustment smoke',v_user,'smoke');
+  v_result := public.adjust_product_inventory(
+    v_pending_id,'transit-arrival-operation',1,100,'shipping',1,100,
+    '运输中商品确认到仓','instock'
+  );
+  v_replay := public.adjust_product_inventory(
+    v_pending_id,'transit-arrival-operation',1,100,'shipping',1,100,
+    '运输中商品确认到仓','instock'
+  );
+  if v_result->>'newStatus' <> 'instock' or not (v_replay->>'replayed')::boolean
+    or (select stock from public.products where id=v_pending_id) <> 1 then
+    raise exception 'Transit arrival did not preserve stock or replay idempotently';
+  end if;
   v_failed := false;
-  begin perform public.complete_pending_products(array[v_pending_id,v_pending_id]);
-  exception when others then v_failed := sqlerrm like '%重复%'; end;
-  if not v_failed then raise exception 'Duplicate pending ids were accepted'; end if;
-  perform public.complete_pending_products(array[v_pending_id]);
+  begin perform public.complete_pending_products(array[v_pending_id]);
+  exception when others then v_failed := sqlerrm like '%旧功能已停用%'; end;
+  if not v_failed then raise exception 'Ledgerless pending completion remained callable'; end if;
+  v_result := public.outbound_product_with_fees(
+    v_pending_id,v_user,150,1,'线下','transit-outbound-operation',null,null,0
+  );
+  if (select status from public.products where id=v_pending_id) <> 'sold'
+    or (select stock from public.products where id=v_pending_id) <> 0
+    or (select count(*) from public.activities where user_id=v_user and sku='TRANSIT-SMOKE' and type='outbound') <> 1 then
+    raise exception 'Transit product sale did not use the outbound ledger path';
+  end if;
 
   v_rows := jsonb_build_array(jsonb_build_object(
     'id','batch-smoke-product','sku','BATCH-SMOKE','size','44','warehouse','Adjustment smoke',
@@ -76,6 +95,20 @@ begin
   begin perform public.batch_inbound_products(jsonb_set(v_rows,'{0,sku}',to_jsonb(repeat('S',121))),v_user,'batch-long-sku');
   exception when others then v_failed := sqlerrm like '%fields or lengths%'; end;
   if not v_failed then raise exception 'Oversized inbound SKU was accepted'; end if;
+
+  v_rows := jsonb_build_array(jsonb_build_object(
+    'id','transit-batch-product','sku','TRANSIT-BATCH','size','45','warehouse','Adjustment smoke',
+    'name','Transit batch','brand','Test','image_url','','location','A4','source','smoke',
+    'quantity',2,'cost',66,'status','shipping'
+  ));
+  perform public.batch_inbound_products(v_rows,v_user,'transit-batch-operation');
+  if not exists(select 1 from public.products where user_id=v_user and sku='TRANSIT-BATCH' and status='shipping' and stock=2) then
+    raise exception 'Purchase transit inbound was not persisted as shipping';
+  end if;
+  v_failed := false;
+  begin perform public.batch_inbound_products(v_rows,v_user,'transit-batch-operation-2');
+  exception when others then v_failed := sqlerrm like '%不能与现有%'; end;
+  if not v_failed then raise exception 'Transit inventory merged into an existing variant'; end if;
 
   v_package := jsonb_build_object(
     'schemaVersion','dewu-seller-pro/ledger-backup@4','exportedAt',now()::text,'scope','full-ledger',

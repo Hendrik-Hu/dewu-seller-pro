@@ -4,7 +4,7 @@ import { parseInventoryAnalytics, parseWarehouseSummary } from '../lib/analytics
 
 export const emptyInventoryAnalytics = (): InventoryAnalytics => ({
   dataQuality: { negativeStockCount: 0, invalidActivityCount: 0 },
-  dashboard: { pendingOrderCount: 0, totalSkuCount: 0, totalVariantCount: 0, todaySalesAmount: 0, todaySalesCount: 0, todayInboundCount: 0, totalStock: 0, totalInventoryValue: 0 },
+  dashboard: { shippingProductCount: 0, totalSkuCount: 0, totalVariantCount: 0, todaySalesAmount: 0, todaySalesCount: 0, todayInboundCount: 0, totalStock: 0, totalInventoryValue: 0 },
   lifetime: { totalInboundCount: 0, totalOutboundCount: 0 },
   monthly: {
     salesAmount: 0, costedSalesAmount: 0, costAmount: 0, grossProfitAmount: 0, grossMarginRate: 0,
@@ -14,7 +14,7 @@ export const emptyInventoryAnalytics = (): InventoryAnalytics => ({
     settlementCoverageRate: 100, pendingSettlementCount: 0, inboundCount: 0, outboundCount: 0,
   },
   charts: { salesTrend: [], topBrands: [], topProducts: [], topStockProducts: [] },
-  pendingProducts: [],
+  shippingProducts: [],
 });
 
 export const getInventoryAnalytics = async (asOf?: Date): Promise<InventoryAnalytics> => {

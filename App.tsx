@@ -14,11 +14,11 @@ import { FeeSchemeModal } from './components/FeeSchemeModal';
 import { AddProductModal } from './components/AddProductModal';
 import { InventoryAdjustmentModal } from './components/InventoryAdjustmentModal';
 import { OutboundModal } from './components/OutboundModal';
-import { PendingOrdersModal } from './components/PendingOrdersModal';
+import { TransitInventoryModal } from './components/PendingOrdersModal';
 import { Tab, Product, Activity, Warehouse, OutboundFeeSelection } from './types';
 import { supabase } from './lib/supabase';
 import { listRecentActivities } from './services/activities';
-import { batchInboundProducts, completePendingProducts, deleteProduct, deleteProducts, updateProductMetadata } from './services/products';
+import { batchInboundProducts, deleteProduct, deleteProducts, updateProductMetadata } from './services/products';
 import { outboundProduct } from './services/outbound';
 import { emptyInventoryAnalytics, getInventoryAnalytics } from './services/analytics';
 import { Loader2 } from 'lucide-react';
@@ -234,9 +234,10 @@ export default function App() {
   // Modals
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [adjustingProduct, setAdjustingProduct] = useState<Product | null>(null);
+  const [adjustmentMode, setAdjustmentMode] = useState<'inventory' | 'transit-arrival'>('inventory');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showOutboundModal, setShowOutboundModal] = useState(false);
-  const [showPendingModal, setShowPendingModal] = useState(false);
+  const [showTransitModal, setShowTransitModal] = useState(false);
   const [showRecycleBin, setShowRecycleBin] = useState(false);
   const [showDataHealth, setShowDataHealth] = useState(false);
   const [showBackupRestore, setShowBackupRestore] = useState(false);
@@ -273,10 +274,11 @@ export default function App() {
     setUserProfile({ name: '卖家用户', avatar: '' });
     setEditingProduct(null);
     setAdjustingProduct(null);
+    setAdjustmentMode('inventory');
     setTransferProductTarget(null);
     setShowAddModal(false);
     setShowOutboundModal(false);
-    setShowPendingModal(false);
+    setShowTransitModal(false);
     setShowRecycleBin(false);
     setShowDataHealth(false);
     setShowBackupRestore(false);
@@ -455,6 +457,7 @@ export default function App() {
       alert('负库存异常只能先通过数据体检修正，不能进入普通盘点调整。');
       return;
     }
+    setAdjustmentMode('inventory');
     setAdjustingProduct(product);
   };
 
@@ -521,12 +524,12 @@ export default function App() {
     setShowOutboundModal(true);
   };
 
-  const handlePendingEntry = async () => {
+  const handleTransitEntry = async () => {
     if (!warehousesReady) {
       alert('仓库信息尚未同步成功，请先重试。');
       return;
     }
-    setShowPendingModal(true);
+    setShowTransitModal(true);
   };
 
   const handleBatchDeleteProducts = async (productIds: string[]) => {
@@ -542,21 +545,6 @@ export default function App() {
     } catch (error: any) {
       console.error('Batch delete error:', error);
       alert(`批量移入回收站失败: ${error.message || '请稍后重试'}`);
-      throw error;
-    }
-  };
-
-  const handleCompletePendingProducts = async (productIds: string[]) => {
-    if (!session?.user?.id || productIds.length === 0) return;
-
-    try {
-      await completePendingProducts(productIds);
-      fetchData();
-      setRefreshTrigger(prev => prev + 1);
-      alert(`已完成 ${productIds.length} 个待发货商品`);
-    } catch (error: any) {
-      console.error('Complete pending error:', error);
-      alert(`操作失败: ${error.message || '请稍后重试'}`);
       throw error;
     }
   };
@@ -657,9 +645,9 @@ export default function App() {
             avatarUrl={userProfile.avatar}
             onInboundClick={handleInboundEntry}
             onOutboundClick={handleOutboundEntry}
-            onPendingClick={handlePendingEntry}
+            onTransitClick={handleTransitEntry}
             activities={activities}
-            pendingOrderCount={inventoryAnalytics.dashboard.pendingOrderCount}
+            transitProductCount={inventoryAnalytics.dashboard.shippingProductCount}
             todaySalesAmount={inventoryAnalytics.dashboard.todaySalesAmount}
             todaySalesCount={inventoryAnalytics.dashboard.todaySalesCount}
             onAvatarClick={() => setCurrentTab(Tab.ME)}
@@ -743,9 +731,9 @@ export default function App() {
             avatarUrl={userProfile.avatar}
             onInboundClick={handleInboundEntry}
             onOutboundClick={handleOutboundEntry}
-            onPendingClick={handlePendingEntry}
+            onTransitClick={handleTransitEntry}
             activities={activities}
-            pendingOrderCount={inventoryAnalytics.dashboard.pendingOrderCount}
+            transitProductCount={inventoryAnalytics.dashboard.shippingProductCount}
             todaySalesAmount={inventoryAnalytics.dashboard.todaySalesAmount}
             todaySalesCount={inventoryAnalytics.dashboard.todaySalesCount}
             onAvatarClick={() => setCurrentTab(Tab.ME)}
@@ -804,7 +792,11 @@ export default function App() {
               isOpen={Boolean(adjustingProduct)}
               userId={session.user.id}
               product={adjustingProduct}
-              onClose={() => setAdjustingProduct(null)}
+              mode={adjustmentMode}
+              onClose={() => {
+                setAdjustingProduct(null);
+                setAdjustmentMode('inventory');
+              }}
               onSaved={async () => {
                 await fetchData();
                 setRefreshTrigger((value) => value + 1);
@@ -816,11 +808,15 @@ export default function App() {
               userId={session.user.id}
               onOutbound={handleOutboundProduct}
             />
-            <PendingOrdersModal
-              isOpen={showPendingModal}
-              onClose={() => setShowPendingModal(false)}
+            <TransitInventoryModal
+              isOpen={showTransitModal}
+              onClose={() => setShowTransitModal(false)}
               userId={session.user.id}
-              onCompletePending={handleCompletePendingProducts}
+              onReviewArrival={(product) => {
+                setShowTransitModal(false);
+                setAdjustmentMode('transit-arrival');
+                setAdjustingProduct(product);
+              }}
             />
             <RecycleBinModal
               isOpen={showRecycleBin}

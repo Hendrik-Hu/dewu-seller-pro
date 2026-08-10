@@ -70,7 +70,7 @@ export const parseInventoryAnalytics = (data: unknown, shape: InventoryAnalytics
         };
       }),
     },
-    pendingProducts: [],
+    shippingProducts: [],
   };
 
   const nonNegative = [
@@ -89,7 +89,7 @@ export const parseInventoryAnalytics = (data: unknown, shape: InventoryAnalytics
   if (parsed.monthly.grossMarginRate > 100) throw new Error('经营摘要.monthly.grossMarginRate不能超过100');
   const integerValues = [
     ...Object.values(parsed.dataQuality),
-    parsed.dashboard.pendingOrderCount,
+    parsed.dashboard.shippingProductCount,
     parsed.dashboard.totalSkuCount,
     parsed.dashboard.totalVariantCount,
     parsed.dashboard.todaySalesCount,

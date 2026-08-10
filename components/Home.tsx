@@ -18,10 +18,10 @@ interface HomeProps {
   onInboundClick: () => void;
   onOutboundClick: () => void;
   onInventoryClick?: () => void; // New prop for direct inventory click
-  onPendingClick: () => void;
+  onTransitClick: () => void;
   onAvatarClick: () => void;
   activities: Activity[];
-  pendingOrderCount: number;
+  transitProductCount: number;
   todaySalesAmount: number;
   todaySalesCount: number;
   analytics: InventoryAnalytics;
@@ -41,10 +41,10 @@ export const Home: React.FC<HomeProps> = ({
   onInboundClick, 
   onOutboundClick, 
   onInventoryClick,
-  onPendingClick,
+  onTransitClick,
   onAvatarClick,
   activities,
-  pendingOrderCount,
+  transitProductCount,
   todaySalesAmount,
   todaySalesCount,
   analytics,
@@ -125,9 +125,9 @@ export const Home: React.FC<HomeProps> = ({
           </div>
         </div>
 
-        {/* Pending Orders Card */}
+        {/* Purchasing transit inventory */}
         <button 
-          onClick={onPendingClick}
+          onClick={onTransitClick}
           className="bg-white dark:bg-zinc-900 p-3.5 rounded-xl border border-slate-100 dark:border-zinc-800 shadow-sm min-h-[132px] group active:scale-95 transition-all text-left"
         >
           <div className="w-full flex justify-between items-center mb-3">
@@ -137,8 +137,8 @@ export const Home: React.FC<HomeProps> = ({
             <ChevronRight size={14} className="text-slate-300 dark:text-zinc-600 group-hover:text-slate-400" />
           </div>
           <div className="space-y-1.5">
-            <div className="text-[42px] leading-none font-bold text-slate-900 dark:text-white">{analyticsReady ? pendingOrderCount : '—'}</div>
-            <div className="text-slate-400 dark:text-zinc-500 text-[11px]">待发货商品</div>
+            <div className="text-[42px] leading-none font-bold text-slate-900 dark:text-white">{analyticsReady ? transitProductCount : '—'}</div>
+            <div className="text-slate-400 dark:text-zinc-500 text-[11px]">采购运输中</div>
           </div>
         </button>
       </div>

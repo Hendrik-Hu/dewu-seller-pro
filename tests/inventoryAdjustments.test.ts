@@ -25,6 +25,41 @@ test('inventory adjustment rounds cost to cents and keeps an explicit reason', (
   });
 });
 
+test('purchase transit arrival is a status-only audited adjustment', () => {
+  const transitProduct = { ...product, status: 'shipping' as const, stock: 2 };
+  assert.deepEqual(parseInventoryAdjustment(transitProduct, '2', '749', '运输中商品确认到仓', 'instock'), {
+    newStock: 2,
+    newCost: 749,
+    targetStatus: 'instock',
+    reason: '运输中商品确认到仓',
+  });
+  assert.throws(() => parseInventoryAdjustment(transitProduct, '2', '749', '确认到仓', 'sold'), /状态变化/);
+  assert.throws(() => parseInventoryAdjustment({ ...transitProduct, stock: 0 }, '0', '749', '确认到仓', 'instock'), /库存必须大于 0/);
+});
+
+test('v0.15 makes shipping purchase transit and disables the ledgerless sold shortcut', async () => {
+  const [sql, home, transitModal, inboundModal, app, service] = await Promise.all([
+    readFile(new URL('../supabase/migrations/20260811030000_define_shipping_as_purchase_transit.sql', import.meta.url), 'utf8'),
+    readFile(new URL('../components/Home.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../components/PendingOrdersModal.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../components/AddProductModal.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../App.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../services/products.ts', import.meta.url), 'utf8'),
+  ]);
+  assert.match(sql, /p_expected_status <> 'shipping' or p_target_status <> 'instock'/);
+  assert.match(sql, /revoke all on function public\.complete_pending_products\(text\[\]\) from public, anon, authenticated/i);
+  assert.match(sql, /卖出必须使用出库记账/);
+  assert.match(sql, /batch_inbound_products_pre_transit_v15/);
+  assert.match(sql, /item->>'status' = 'shipping' or p\.status = 'shipping'/);
+  assert.match(home, /采购运输中/);
+  assert.match(transitModal, /到仓只转为在售/);
+  assert.match(inboundModal, /直接入仓/);
+  assert.match(inboundModal, /采购运输中/);
+  assert.doesNotMatch(transitModal, /待发货商品|标记已处理|批量完成/);
+  assert.doesNotMatch(app, /handleCompletePendingProducts|completePendingProducts/);
+  assert.doesNotMatch(service, /complete_pending_products/);
+});
+
 test('v0.12 SQL locks operations and variants, checks expected values, and revokes direct writes', async () => {
   const sql = await readFile(new URL('../supabase/migrations/20260811000000_add_audited_inventory_adjustments.sql', import.meta.url), 'utf8');
   assert.match(sql, /inventory-adjustment-operation:/);

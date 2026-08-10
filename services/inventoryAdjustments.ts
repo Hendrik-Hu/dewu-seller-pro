@@ -27,6 +27,7 @@ export interface InventoryAdjustmentDraft {
   expectedStock?: number;
   expectedCost?: number;
   expectedStatus?: InventoryAdjustmentAudit['oldStatus'];
+  targetStatus?: InventoryAdjustmentAudit['newStatus'];
 }
 
 const getDraftKey = (userId: string, productId: string) =>
@@ -53,6 +54,9 @@ export const loadInventoryAdjustmentDraft = async (userId: string, productId: st
       expectedStatus: ['instock', 'shipping', 'sold', 'flaw'].includes(String(parsed.expectedStatus))
         ? parsed.expectedStatus as InventoryAdjustmentAudit['oldStatus']
         : undefined,
+      targetStatus: ['instock', 'shipping', 'sold', 'flaw'].includes(String(parsed.targetStatus))
+        ? parsed.targetStatus as InventoryAdjustmentAudit['newStatus']
+        : undefined,
     } satisfies InventoryAdjustmentDraft;
   } catch {
     return null;
@@ -74,6 +78,7 @@ export const adjustProductInventory = async (params: {
   expectedStock: number;
   expectedCost: number;
   expectedStatus: InventoryAdjustmentAudit['oldStatus'];
+  targetStatus?: InventoryAdjustmentAudit['newStatus'];
   newStock: number;
   newCost: number;
   reason: string;
@@ -84,6 +89,7 @@ export const adjustProductInventory = async (params: {
     p_expected_stock: params.expectedStock,
     p_new_cost: params.newCost,
     p_new_stock: params.newStock,
+    p_target_status: params.targetStatus || null,
     p_operation_id: params.operationId,
     p_product_id: params.productId,
     p_reason: params.reason,

@@ -48,7 +48,7 @@ const getLocalDateKey = (date: Date) =>
 const getInStockProducts = (products: Product[]) =>
   products.filter((product) => product.status === 'instock' && Number(product.stock) >= 0);
 
-export const getPendingProducts = (products: Product[]) =>
+export const getTransitProducts = (products: Product[]) =>
   products.filter((product) => product.status === 'shipping');
 
 export const buildInventoryAnalytics = (
@@ -57,7 +57,7 @@ export const buildInventoryAnalytics = (
   now = new Date()
 ) => {
   const inStockProducts = getInStockProducts(products);
-  const pendingProducts = getPendingProducts(products);
+  const transitProducts = getTransitProducts(products);
   const outboundActivities = activities.filter((activity) => activity.type === 'outbound');
   const inboundActivities = activities.filter((activity) => activity.type === 'inbound');
   const monthActivities = activities.filter((activity) => isSameLocalMonth(getActivityDate(activity), now));
@@ -173,7 +173,7 @@ export const buildInventoryAnalytics = (
       invalidActivityCount: activities.filter(hasInvalidActivityQuantity).length,
     },
     dashboard: {
-      pendingOrderCount: pendingProducts.length,
+      shippingProductCount: transitProducts.length,
       totalSkuCount: new Set(inStockProducts.map((product) => String(product.sku || '').trim().toUpperCase()).filter(Boolean)).size,
       totalVariantCount: inStockProducts.length,
       todaySalesAmount,
@@ -220,7 +220,7 @@ export const buildInventoryAnalytics = (
         .sort((a, b) => b.stock - a.stock)
         .slice(0, 5),
     },
-    pendingProducts,
+    shippingProducts: transitProducts,
   };
 };
 

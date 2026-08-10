@@ -192,13 +192,6 @@ export const deleteProducts = async (productIds: string[]) => {
   if (error) throw error;
 };
 
-export const completePendingProducts = async (productIds: string[]) => {
-  const { error } = await supabase.rpc('complete_pending_products', {
-    p_product_ids: productIds,
-  });
-  if (error) throw error;
-};
-
 export const listDeletedProducts = async (userId: string): Promise<Product[]> => {
   const { data, error } = await supabase
     .from('products')

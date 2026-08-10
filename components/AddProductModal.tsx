@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Camera, Plus, Save, Trash2, X } from 'lucide-react';
+import { Camera, PackageCheck, Plus, Save, Trash2, Truck, X } from 'lucide-react';
 import { Preferences } from '@capacitor/preferences';
 import { Product, Warehouse } from '../types';
 import { formatProductSize, normalizeBrand, normalizeSize, normalizeSku } from '../lib/productNormalization';
@@ -537,6 +537,17 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
               />
             </div>
           </div>
+
+          {!initialData && (
+            <div>
+              <div className="mb-1 text-xs font-medium text-slate-500">入库状态 <span className="text-rose-500">必填</span></div>
+              <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-1.5">
+                <button type="button" onClick={() => updateProductData({ status: 'instock' })} className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium transition-colors ${productData.status !== 'shipping' ? 'bg-white text-dewu-600 shadow-sm' : 'text-slate-500'}`}><PackageCheck size={14} />直接入仓</button>
+                <button type="button" onClick={() => updateProductData({ status: 'shipping' })} className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium transition-colors ${productData.status === 'shipping' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500'}`}><Truck size={14} />采购运输中</button>
+              </div>
+              <p className="mt-1 text-[10px] leading-4 text-slate-400">{productData.status === 'shipping' ? '运输中商品不计入可售库存，收货后需在首页“采购运输中”确认到仓。' : '直接入仓后立即计入可售库存。'}</p>
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">

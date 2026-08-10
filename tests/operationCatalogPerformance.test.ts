@@ -10,7 +10,7 @@ test('operation entry points no longer preload the full product catalog', async 
   assert.doesNotMatch(app, /existingProducts=|products=\{products\}/);
   assert.match(app, /<AddProductModal/);
   assert.match(app, /<OutboundModal/);
-  assert.match(app, /<PendingOrdersModal[\s\S]*userId=\{session\.user\.id\}/);
+  assert.match(app, /<TransitInventoryModal[\s\S]*userId=\{session\.user\.id\}/);
 });
 
 test('inbound suggestions are debounced, guarded, and limited to five server results', async () => {
@@ -22,7 +22,7 @@ test('inbound suggestions are debounced, guarded, and limited to five server res
   assert.match(modal, /联想失败，可继续手动填写/);
 });
 
-test('outbound and pending lists use paginated server queries with latest-request guards', async () => {
+test('outbound and transit lists use paginated server queries with latest-request guards', async () => {
   const [outbound, pending] = await Promise.all([
     read('components/OutboundModal.tsx'),
     read('components/PendingOrdersModal.tsx'),
@@ -35,7 +35,8 @@ test('outbound and pending lists use paginated server queries with latest-reques
 
   assert.match(pending, /listProducts\(\{[\s\S]*status: 'shipping'[\s\S]*pageSize: 20/);
   assert.match(pending, /latestRequest/);
-  assert.match(pending, /全选当前页/);
+  assert.match(pending, /到仓核对/);
+  assert.doesNotMatch(pending, /标记已处理|批量完成/);
   assert.doesNotMatch(pending, /products\.filter/);
 });
 

@@ -21,11 +21,13 @@ interface InventoryAdjustmentModalProps {
   product: Product | null;
   onClose: () => void;
   onSaved: () => Promise<void> | void;
+  mode?: 'inventory' | 'transit-arrival';
 }
 
 export const InventoryAdjustmentModal: React.FC<InventoryAdjustmentModalProps> = ({
-  isOpen, userId, product, onClose, onSaved,
+  isOpen, userId, product, onClose, onSaved, mode = 'inventory',
 }) => {
+  const isTransitArrival = mode === 'transit-arrival';
   const [draft, setDraft] = useState<InventoryAdjustmentDraft | null>(null);
   const [audits, setAudits] = useState<InventoryAdjustmentAudit[]>([]);
   const [ready, setReady] = useState(false);
@@ -46,11 +48,12 @@ export const InventoryAdjustmentModal: React.FC<InventoryAdjustmentModalProps> =
       operationId: createInventoryAdjustmentOperationId(),
       newStock: String(product.stock),
       newCost: product.price.toFixed(2),
-      reason: '',
+      reason: isTransitArrival ? '运输中商品确认到仓' : '',
       submissionState: 'editing',
       expectedStock: product.stock,
       expectedCost: product.price,
       expectedStatus: product.status,
+      targetStatus: isTransitArrival ? 'instock' : undefined,
     };
     Promise.all([
       loadInventoryAdjustmentDraft(userId, product.id),
@@ -59,7 +62,13 @@ export const InventoryAdjustmentModal: React.FC<InventoryAdjustmentModalProps> =
       if (cancelled) return;
       setDraft(savedDraft
         ? savedDraft.submissionState === 'editing'
-          ? { ...savedDraft, expectedStock: product.stock, expectedCost: product.price, expectedStatus: product.status }
+          ? {
+              ...savedDraft,
+              expectedStock: product.stock,
+              expectedCost: product.price,
+              expectedStatus: product.status,
+              targetStatus: isTransitArrival ? 'instock' : undefined,
+            }
           : savedDraft
         : fallback);
       setAudits(history);
@@ -71,7 +80,7 @@ export const InventoryAdjustmentModal: React.FC<InventoryAdjustmentModalProps> =
       setReady(false);
     });
     return () => { cancelled = true; };
-  }, [isOpen, product?.id, userId]);
+  }, [isOpen, isTransitArrival, product?.id, userId]);
 
   useEffect(() => {
     if (!isOpen || !product || !ready || !draft || result) return;
@@ -87,11 +96,11 @@ export const InventoryAdjustmentModal: React.FC<InventoryAdjustmentModalProps> =
     if (!product || !draft) return null;
     const newStock = draft.newStock.trim() === '' ? null : Number(draft.newStock);
     const newCost = draft.newCost.trim() === '' ? null : Number(draft.newCost);
-    const newStatus = product.status === 'sold' && Number.isFinite(newStock) && Number(newStock) > 0
+    const newStatus = draft.targetStatus || (product.status === 'sold' && Number.isFinite(newStock) && Number(newStock) > 0
       ? 'instock'
       : product.status === 'instock' && newStock === 0
         ? 'sold'
-        : product.status;
+        : product.status);
     return { newStock, newCost, newStatus };
   }, [draft, product]);
 
@@ -152,7 +161,7 @@ export const InventoryAdjustmentModal: React.FC<InventoryAdjustmentModalProps> =
     }
     let parsed;
     try {
-      parsed = parseInventoryAdjustment(product, draft.newStock, draft.newCost, draft.reason);
+      parsed = parseInventoryAdjustment(product, draft.newStock, draft.newCost, draft.reason, draft.targetStatus);
     } catch (validationError: any) {
       setError(validationError?.message || '请核对调整内容');
       return;
@@ -242,7 +251,7 @@ export const InventoryAdjustmentModal: React.FC<InventoryAdjustmentModalProps> =
       <div className="flex max-h-[90vh] w-full max-w-sm flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-zinc-950">
         <header className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-zinc-800">
           <div>
-            <h2 className="font-bold text-slate-900 dark:text-white">盘点调整 / 成本校正</h2>
+            <h2 className="font-bold text-slate-900 dark:text-white">{isTransitArrival ? '运输中商品到仓核对' : '盘点调整 / 成本校正'}</h2>
             <p className="mt-0.5 text-[11px] text-slate-500">{product.sku} · {formatProductSize(product.size)} · {product.warehouse}</p>
           </div>
           <button type="button" onClick={onClose} className="p-2 text-slate-400" aria-label="关闭盘点调整"><X size={19} /></button>
@@ -251,25 +260,28 @@ export const InventoryAdjustmentModal: React.FC<InventoryAdjustmentModalProps> =
         <div className="space-y-4 overflow-y-auto p-4">
           <div className="flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] leading-5 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
             <AlertTriangle size={15} className="mt-0.5 shrink-0" />
-            仅用于实物盘点差异和历史成本校正。正常进货请用“入库”，正常卖出请用“出库”。
+            {isTransitArrival
+              ? '此操作只将采购运输中商品确认到仓，不改库存和成本。卖出商品必须使用“出库”记录成交与费用。'
+              : '仅用于实物盘点差异和历史成本校正。正常进货请用“入库”，正常卖出请用“出库”。'}
           </div>
 
           {!ready || !draft ? (
             <div className="flex items-center justify-center gap-2 py-12 text-sm text-slate-400"><Loader2 size={18} className="animate-spin" />加载盘点草稿</div>
           ) : result ? (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900/60 dark:bg-emerald-950/30">
-              <div className="flex items-center gap-2 font-semibold text-emerald-700 dark:text-emerald-300"><CheckCircle2 size={18} />调整已记账</div>
+              <div className="flex items-center gap-2 font-semibold text-emerald-700 dark:text-emerald-300"><CheckCircle2 size={18} />{isTransitArrival ? '到仓已记账' : '调整已记账'}</div>
               <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                 <div className="rounded-lg bg-white/80 p-2 dark:bg-zinc-900/60"><div className="text-slate-400">库存</div><div className="mt-1 font-semibold">{result.oldStock} → {result.newStock}</div></div>
                 <div className="rounded-lg bg-white/80 p-2 dark:bg-zinc-900/60"><div className="text-slate-400">平均成本</div><div className="mt-1 font-semibold">¥{result.oldCost.toFixed(2)} → ¥{result.newCost.toFixed(2)}</div></div>
               </div>
+              {result.oldStatus !== result.newStatus && <p className="mt-2 text-[11px] text-emerald-700">状态：运输中 → 在售</p>}
               {result.replayed && <p className="mt-2 text-[11px] text-emerald-700">网络重试已命中原记录，没有重复调整。</p>}
               <button type="button" onClick={onClose} className="mt-4 w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white">完成</button>
             </div>
           ) : confirmation ? (
             <section className="space-y-4" aria-label="盘点调整确认">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-zinc-800 dark:bg-zinc-900">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">确认本次盘点</h3>
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{isTransitArrival ? '确认商品到仓' : '确认本次盘点'}</h3>
                 <p className="mt-1 text-[11px] leading-5 text-slate-500">确认记账后将锁定本次请求，并写入不可静默覆盖的调整审计。</p>
                 <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                   <div className="rounded-lg bg-white p-2.5 dark:bg-zinc-950"><div className="text-slate-400">库存</div><div className="mt-1 font-semibold">{product.stock} → {confirmation.newStock}</div></div>
@@ -277,7 +289,7 @@ export const InventoryAdjustmentModal: React.FC<InventoryAdjustmentModalProps> =
                 </div>
                 {preview?.newStatus !== product.status && (
                   <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300">
-                    状态：{product.status === 'instock' ? '在售' : '已售罄'} → {preview?.newStatus === 'instock' ? '在售' : '已售罄'}
+                    状态：{product.status === 'shipping' ? '运输中' : product.status === 'instock' ? '在售' : '已售罄'} → {preview?.newStatus === 'instock' ? '在售' : '已售罄'}
                   </div>
                 )}
                 <div className="mt-3 rounded-lg bg-white p-2.5 text-xs dark:bg-zinc-950"><div className="text-slate-400">核对原因</div><div className="mt-1 break-words text-slate-700 dark:text-zinc-200">{confirmation.reason}</div></div>
@@ -293,11 +305,11 @@ export const InventoryAdjustmentModal: React.FC<InventoryAdjustmentModalProps> =
           ) : (
             <>
               <div className="grid grid-cols-2 gap-3">
-                <label className="text-xs text-slate-500">盘点后库存 <span className="text-rose-500">必填</span>
-                  <input type="number" min="0" step="1" value={draft.newStock} disabled={draft.submissionState !== 'editing'} onChange={(event) => updateDraft({ newStock: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-dewu-500 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white" />
+                <label className="text-xs text-slate-500">{isTransitArrival ? '到仓库存' : '盘点后库存'} <span className="text-rose-500">必填</span>
+                  <input type="number" min="0" step="1" value={draft.newStock} disabled={draft.submissionState !== 'editing' || isTransitArrival} onChange={(event) => updateDraft({ newStock: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-dewu-500 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white" />
                 </label>
-                <label className="text-xs text-slate-500">校正后平均成本 <span className="text-rose-500">必填</span>
-                  <input type="number" min="0" step="0.01" value={draft.newCost} disabled={draft.submissionState !== 'editing'} onChange={(event) => updateDraft({ newCost: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-dewu-500 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white" />
+                <label className="text-xs text-slate-500">{isTransitArrival ? '到仓平均成本' : '校正后平均成本'} <span className="text-rose-500">必填</span>
+                  <input type="number" min="0" step="0.01" value={draft.newCost} disabled={draft.submissionState !== 'editing' || isTransitArrival} onChange={(event) => updateDraft({ newCost: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-dewu-500 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white" />
                 </label>
               </div>
 
@@ -307,7 +319,7 @@ export const InventoryAdjustmentModal: React.FC<InventoryAdjustmentModalProps> =
               </div>
               {preview?.newStatus !== product.status && (
                 <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300">
-                  状态将自动从“{product.status === 'instock' ? '在售' : '已售罄'}”变为“{preview?.newStatus === 'instock' ? '在售' : '已售罄'}”，并写入同一条审计。
+                  状态将从“{product.status === 'shipping' ? '运输中' : product.status === 'instock' ? '在售' : '已售罄'}”变为“{preview?.newStatus === 'instock' ? '在售' : '已售罄'}”，并写入同一条审计。
                 </div>
               )}
 
@@ -317,7 +329,7 @@ export const InventoryAdjustmentModal: React.FC<InventoryAdjustmentModalProps> =
               </label>
               {error && <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-600 dark:bg-rose-950/30 dark:text-rose-300">{error}</div>}
               <button type="button" onClick={handleSubmit} disabled={busy || !ready} className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 py-3 text-sm font-semibold text-white disabled:opacity-50 dark:bg-dewu-500">
-                {busy ? <Loader2 size={17} className="animate-spin" /> : <Scale size={17} />}{busy ? '正在核对' : draft.submissionState === 'submitted' ? '核对上次调整' : draft.submissionState === 'retryable' ? '重试原调整' : '核对并提交调整'}
+                {busy ? <Loader2 size={17} className="animate-spin" /> : <Scale size={17} />}{busy ? '正在核对' : draft.submissionState === 'submitted' ? '核对上次调整' : draft.submissionState === 'retryable' ? '重试原调整' : isTransitArrival ? '核对并确认到仓' : '核对并提交调整'}
               </button>
               {draft.submissionState === 'retryable' && (
                 <button type="button" onClick={abandonRetryableRequest} disabled={busy} className="w-full rounded-xl border border-slate-200 py-2.5 text-xs font-medium text-slate-600 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300">
