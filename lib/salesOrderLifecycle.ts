@@ -44,7 +44,7 @@ export const SALES_ORDER_ACTION_LABELS: Record<SalesOrderAction, string> = {
   start_authentication: '开始鉴别',
   pass_authentication: '确认鉴别通过',
   fail_authentication: '标记鉴别失败',
-  settle: '补录结算',
+  settle: '确认订单已结算',
   cancel: '取消订单',
   start_return: '开始退回',
   confirm_return: '确认退回入库',

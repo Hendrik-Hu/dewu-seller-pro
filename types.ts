@@ -105,6 +105,17 @@ export interface SalesOrder {
   updatedAt: string;
 }
 
+export interface SalesOrderEvent {
+  id: string;
+  orderId: string;
+  action: 'create' | import('./lib/salesOrderLifecycle.ts').SalesOrderAction;
+  fromStatus?: SalesOrderStatus;
+  toStatus: SalesOrderStatus;
+  details: Record<string, unknown>;
+  result: Record<string, unknown>;
+  createdAt: string;
+}
+
 export type OutboundExecutionMode = 'sales_order' | 'quick_ledger';
 
 export interface SalesStat {

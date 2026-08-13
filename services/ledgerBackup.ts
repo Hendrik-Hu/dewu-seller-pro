@@ -6,7 +6,7 @@ const safeText = (value: unknown) => value == null ? '' : String(value);
 const safeNumber = (value: unknown) => value == null ? null : Number(value);
 
 export const createFullLedgerBackup = async (userId: string): Promise<LedgerBackupPackage> => {
-  const [products, activities, warehouses, repairs, feeSchemes, settlements, inventoryAdjustments] = await Promise.all([
+  const [products, activities, warehouses, repairs, feeSchemes, settlements, inventoryAdjustments, salesOrders, salesOrderEvents] = await Promise.all([
     fetchAllPages((from, to) => supabase.from('products')
       .select('id,name,brand,size,sku,price,stock,status,location,warehouse,source,created_at,deleted_at', { count: 'exact' })
       .eq('user_id', userId).order('created_at').order('id').range(from, to), { getKey: (row: any) => String(row.id), label: '商品账本' }),
@@ -28,6 +28,12 @@ export const createFullLedgerBackup = async (userId: string): Promise<LedgerBack
     fetchAllPages((from, to) => supabase.from('inventory_adjustment_audit')
       .select('id,operation_id,product_id,sku,size,warehouse,old_stock,new_stock,old_cost,new_cost,old_status,new_status,reason,created_at', { count: 'exact' })
       .eq('user_id', userId).order('created_at').order('id').range(from, to), { getKey: (row: any) => String(row.id), label: '盘点调整审计' }),
+    fetchAllPages((from, to) => supabase.from('sales_orders')
+      .select('id,product_id,status,product_name,brand,sku,size,warehouse,quantity,unit_sale_price,frozen_unit_cost,platform,external_order_no,note,fee_snapshot,estimated_platform_fee,estimated_net_proceeds,estimated_net_profit,outbound_activity_id,inventory_restored,version,created_at,updated_at,shipped_at,authentication_started_at,authenticated_at,settled_at,canceled_at,return_started_at,returned_at,refunded_at', { count: 'exact' })
+      .eq('user_id', userId).order('created_at').order('id').range(from, to), { getKey: (row: any) => String(row.id), label: '销售订单' }),
+    fetchAllPages((from, to) => supabase.from('sales_order_events')
+      .select('id,order_id,operation_id,payload_fingerprint,action,from_status,to_status,details,result,created_at', { count: 'exact' })
+      .eq('user_id', userId).order('created_at').order('id').range(from, to), { getKey: (row: any) => String(row.id), label: '销售订单事件' }),
   ]);
 
   return buildLedgerBackupPackage({
@@ -69,6 +75,24 @@ export const createFullLedgerBackup = async (userId: string): Promise<LedgerBack
       sku: safeText(row.sku), size: safeText(row.size), warehouse: safeText(row.warehouse),
       oldStock: safeNumber(row.old_stock), newStock: safeNumber(row.new_stock), oldCost: safeNumber(row.old_cost), newCost: safeNumber(row.new_cost),
       oldStatus: safeText(row.old_status), newStatus: safeText(row.new_status), reason: safeText(row.reason), createdAt: safeText(row.created_at),
+    })),
+    salesOrders: salesOrders.map((row: any) => ({
+      sourceId: safeText(row.id), productSourceId: safeText(row.product_id), status: safeText(row.status),
+      productName: safeText(row.product_name), brand: safeText(row.brand), sku: safeText(row.sku), size: safeText(row.size), warehouse: safeText(row.warehouse),
+      quantity: safeNumber(row.quantity), unitSalePrice: safeNumber(row.unit_sale_price), frozenUnitCost: safeNumber(row.frozen_unit_cost),
+      platform: safeText(row.platform), externalOrderNo: safeText(row.external_order_no), note: safeText(row.note), feeSnapshot: row.fee_snapshot ?? {},
+      estimatedPlatformFee: safeNumber(row.estimated_platform_fee), estimatedNetProceeds: safeNumber(row.estimated_net_proceeds), estimatedNetProfit: safeNumber(row.estimated_net_profit),
+      outboundActivitySourceId: safeText(row.outbound_activity_id), inventoryRestored: Boolean(row.inventory_restored), version: safeNumber(row.version),
+      createdAt: safeText(row.created_at), updatedAt: safeText(row.updated_at), shippedAt: row.shipped_at == null ? null : safeText(row.shipped_at),
+      authenticationStartedAt: row.authentication_started_at == null ? null : safeText(row.authentication_started_at), authenticatedAt: row.authenticated_at == null ? null : safeText(row.authenticated_at),
+      settledAt: row.settled_at == null ? null : safeText(row.settled_at), canceledAt: row.canceled_at == null ? null : safeText(row.canceled_at),
+      returnStartedAt: row.return_started_at == null ? null : safeText(row.return_started_at), returnedAt: row.returned_at == null ? null : safeText(row.returned_at),
+      refundedAt: row.refunded_at == null ? null : safeText(row.refunded_at),
+    })),
+    salesOrderEvents: salesOrderEvents.map((row: any) => ({
+      sourceId: safeText(row.id), orderSourceId: safeText(row.order_id), operationId: safeText(row.operation_id),
+      payloadFingerprint: safeText(row.payload_fingerprint), action: safeText(row.action), fromStatus: row.from_status == null ? null : safeText(row.from_status),
+      toStatus: safeText(row.to_status), details: row.details ?? {}, result: row.result ?? {}, createdAt: safeText(row.created_at),
     })),
   });
 };

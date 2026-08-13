@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mapSalesOrderFromDb } from '../lib/salesOrderMapping.ts';
+import { mapSalesOrderEventFromDb, mapSalesOrderFromDb } from '../lib/salesOrderMapping.ts';
 
 const row = {
   id: '00000000-0000-0000-0000-000000000001', status: 'pending_shipment', product_id: 'p1',
@@ -28,4 +28,25 @@ test('rejects malformed status, amount, quantity, and fee snapshots', () => {
 test('does not accept negative frozen sales or cost amounts', () => {
   assert.throws(() => mapSalesOrderFromDb({ ...row, frozen_unit_cost: -1 }), /无效金额/);
   assert.throws(() => mapSalesOrderFromDb({ ...row, unit_sale_price: -0.01 }), /无效金额/);
+});
+
+test('maps order events and rejects unknown actions or statuses', () => {
+  const eventRow = {
+    id: '00000000-0000-0000-0000-000000000002',
+    order_id: row.id,
+    action: 'ship',
+    from_status: 'pending_shipment',
+    to_status: 'shipped',
+    details: {},
+    result: { status: 'shipped' },
+    created_at: '2026-08-13T00:10:00Z',
+  };
+  const event = mapSalesOrderEventFromDb(eventRow);
+  assert.equal(event.action, 'ship');
+  assert.equal(event.fromStatus, 'pending_shipment');
+  assert.throws(() => mapSalesOrderEventFromDb({ ...eventRow, action: 'force' }), /未知动作/);
+  assert.throws(() => mapSalesOrderEventFromDb({
+    id: event.id, order_id: row.id, action: 'ship', from_status: 'pending_shipment',
+    to_status: 'shipping', details: {}, result: {}, created_at: event.createdAt,
+  }), /未知状态/);
 });

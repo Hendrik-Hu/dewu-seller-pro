@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { normalizeOutboundQuantity, normalizeSalePrice } from '../lib/outboundRules';
-import { mapSalesOrderFromDb } from '../lib/salesOrderMapping';
-import type { OutboundFeeSelection, Product, SalesOrder, SalesOrderStatus } from '../types';
+import { mapSalesOrderEventFromDb, mapSalesOrderFromDb } from '../lib/salesOrderMapping';
+import type { OutboundFeeSelection, Product, SalesOrder, SalesOrderEvent, SalesOrderStatus } from '../types';
 import type { SalesOrderAction } from '../lib/salesOrderLifecycle';
 
 export interface CreateSalesOrderParams {
@@ -56,6 +56,38 @@ export const listSalesOrders = async (
     .range(from, from + safePageSize - 1);
   if (error) throw error;
   return { orders: (data || []).map(mapSalesOrderFromDb), totalCount: count || 0 };
+};
+
+export const listSalesOrderEvents = async (
+  userId: string,
+  orderId: string,
+  page = 1,
+  pageSize = 20,
+): Promise<{ events: SalesOrderEvent[]; totalCount: number }> => {
+  const safePage = Math.max(1, Math.trunc(page));
+  const safePageSize = Math.min(50, Math.max(1, Math.trunc(pageSize)));
+  const from = (safePage - 1) * safePageSize;
+  const { data, error, count } = await supabase
+    .from('sales_order_events')
+    .select('id,order_id,action,from_status,to_status,details,result,created_at', { count: 'exact' })
+    .eq('user_id', userId)
+    .eq('order_id', orderId)
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .range(from, from + safePageSize - 1);
+  if (error) throw error;
+  return { events: (data || []).map(mapSalesOrderEventFromDb), totalCount: count || 0 };
+};
+
+export const getSalesOrder = async (userId: string, orderId: string): Promise<SalesOrder | null> => {
+  const { data, error } = await supabase
+    .from('sales_orders')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('id', orderId)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? mapSalesOrderFromDb(data) : null;
 };
 
 export interface SalesOrderTodoSummary {

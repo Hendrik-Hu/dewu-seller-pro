@@ -6,6 +6,7 @@ declare
   v_instance uuid := '00000000-0000-0000-0000-000000000000';
   v_product_id text := 'sales-order-smoke-' || txid_current()::text;
   v_cancel_product_id text := 'sales-order-cancel-' || txid_current()::text;
+  v_settle_product_id text := 'sales-order-settle-' || txid_current()::text;
   v_create jsonb;
   v_replay jsonb;
   v_transition jsonb;
@@ -67,6 +68,19 @@ begin
   begin perform public.transition_sales_order(v_user,v_order_id,'ship','pending_shipment',1,'sales-order-stale-action');
   exception when others then v_failed := sqlerrm like '%changed%'; end;
   if not v_failed then raise exception 'Stale expected status/version was accepted'; end if;
+
+  insert into public.products(id,name,brand,size,sku,price,stock,image_url,status,location,created_at,warehouse,user_id,source)
+  values(v_settle_product_id,'Settlement smoke','Test','44','ORDER-SETTLE',90,1,'','instock','A3',now(),'Sales order smoke',v_user,'smoke');
+  v_create:=public.create_sales_order(v_user,v_settle_product_id,1,140,'得物','sales-order-settle-create',null,null,5,'ORDER-SETTLE-1',null);
+  v_order_id:=(v_create->>'orderId')::uuid;
+  v_transition:=public.transition_sales_order(v_user,v_order_id,'ship','pending_shipment',1,'sales-order-settle-ship');
+  perform public.transition_sales_order(v_user,v_order_id,'start_authentication','shipped',2,'sales-order-settle-auth');
+  perform public.transition_sales_order(v_user,v_order_id,'pass_authentication','authenticating',3,'sales-order-settle-pass');
+  perform public.settle_outbound_activity(v_user,v_transition->>'outboundActivityId','sales-order-actual-settlement',6,now(),'ORDER-SETTLE-1','回滚烟测');
+  if (select status from public.sales_orders where id=v_order_id)<>'settled'
+    or (select count(*) from public.sales_order_events where order_id=v_order_id and action='settle')<>1 then
+    raise exception 'Actual settlement did not advance the linked sales order';
+  end if;
 end;
 $$;
 

@@ -1,4 +1,4 @@
-import type { SalesOrder, SalesOrderStatus } from '../types.ts';
+import type { SalesOrder, SalesOrderEvent, SalesOrderStatus } from '../types.ts';
 
 const salesOrderStatuses = new Set<SalesOrderStatus>([
   'pending_shipment', 'shipped', 'authenticating', 'authenticated', 'settled',
@@ -47,5 +47,40 @@ export const mapSalesOrderFromDb = (raw: unknown): SalesOrder => {
     outboundActivityId: typeof row.outbound_activity_id === 'string' ? row.outbound_activity_id : undefined,
     inventoryRestored: row.inventory_restored === true, version,
     createdAt: requiredString(row, 'created_at'), updatedAt: requiredString(row, 'updated_at'),
+  };
+};
+
+const salesOrderEventActions = new Set<SalesOrderEvent['action']>([
+  'create', 'ship', 'start_authentication', 'pass_authentication', 'fail_authentication',
+  'settle', 'cancel', 'start_return', 'confirm_return', 'complete_refund',
+]);
+
+export const mapSalesOrderEventFromDb = (raw: unknown): SalesOrderEvent => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('销售订单事件返回了无效数据');
+  const row = raw as Record<string, unknown>;
+  const action = requiredString(row, 'action') as SalesOrderEvent['action'];
+  const toStatus = requiredString(row, 'to_status') as SalesOrderStatus;
+  const fromStatus = typeof row.from_status === 'string' && row.from_status.trim()
+    ? row.from_status as SalesOrderStatus
+    : undefined;
+  if (!salesOrderEventActions.has(action)) throw new Error('销售订单事件返回了未知动作');
+  if (!salesOrderStatuses.has(toStatus) || (fromStatus && !salesOrderStatuses.has(fromStatus))) {
+    throw new Error('销售订单事件返回了未知状态');
+  }
+  const details = row.details;
+  const result = row.result;
+  if (!details || typeof details !== 'object' || Array.isArray(details)
+    || !result || typeof result !== 'object' || Array.isArray(result)) {
+    throw new Error('销售订单事件快照无效');
+  }
+  return {
+    id: requiredString(row, 'id'),
+    orderId: requiredString(row, 'order_id'),
+    action,
+    fromStatus,
+    toStatus,
+    details: details as Record<string, unknown>,
+    result: result as Record<string, unknown>,
+    createdAt: requiredString(row, 'created_at'),
   };
 };

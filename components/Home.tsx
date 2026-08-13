@@ -246,6 +246,7 @@ export const Home: React.FC<HomeProps> = ({
           userId={userId}
           onClose={() => setShowSalesOrders(false)}
           onChanged={() => { setOrderSummaryRetry((value) => value + 1); onRetryData(); }}
+          onOpenLedger={() => { setShowSalesOrders(false); setShowActivityLedger(true); }}
         />
       )}
 

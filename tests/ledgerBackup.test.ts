@@ -10,12 +10,14 @@ const data = {
   feeSchemes: [{ sourceId: 'f1', name: '得物普通出售' }],
   settlements: [{ sourceId: 's1', activitySourceId: 'a1', revision: 1 }],
   inventoryAdjustments: [{ sourceId: 'ia1', productSourceId: 'p1', oldStock: 1, newStock: 2 }],
+  salesOrders: [{ sourceId: 'o1', productSourceId: 'p1', status: 'pending_shipment' }],
+  salesOrderEvents: [{ sourceId: 'oe1', orderSourceId: 'o1', action: 'create' }],
 };
 
 test('full ledger backup contains version, counts, media warning and valid integrity hash', async () => {
   const backup = await buildLedgerBackupPackage(data, '2026-08-10T00:00:00.000Z');
-  assert.equal(backup.schemaVersion, 'dewu-seller-pro/ledger-backup@4');
-  assert.deepEqual(backup.counts, { products: 2, activeProducts: 1, recycledProducts: 1, activities: 1, warehouses: 1, repairs: 1, feeSchemes: 1, settlements: 1, inventoryAdjustments: 1 });
+  assert.equal(backup.schemaVersion, 'dewu-seller-pro/ledger-backup@5');
+  assert.deepEqual(backup.counts, { products: 2, activeProducts: 1, recycledProducts: 1, activities: 1, warehouses: 1, repairs: 1, feeSchemes: 1, settlements: 1, inventoryAdjustments: 1, salesOrders: 1, salesOrderEvents: 1 });
   assert.equal(backup.media.included, false);
   assert.equal((await parseLedgerBackupPackage(serializeLedgerBackupPackage(backup))).integrity.value, backup.integrity.value);
 });
@@ -68,6 +70,22 @@ test('settlement-era v3 backup remains parseable without inventory adjustment au
   const parsed = await parseLedgerBackupPackage(JSON.stringify({ ...unsigned, integrity: { algorithm: 'SHA-256', value } }));
   assert.equal(parsed.schemaVersion, 'dewu-seller-pro/ledger-backup@3');
   assert.equal(parsed.data.inventoryAdjustments, undefined);
+});
+
+test('adjustment-era v4 backup remains parseable without sales order history', async () => {
+  const v4Data = { ...data } as any;
+  delete v4Data.salesOrders;
+  delete v4Data.salesOrderEvents;
+  const unsigned = {
+    schemaVersion: 'dewu-seller-pro/ledger-backup@4', exportedAt: '2026-08-10T00:00:00.000Z', scope: 'full-ledger',
+    counts: { products: 2, activeProducts: 1, recycledProducts: 1, activities: 1, warehouses: 1, repairs: 1, feeSchemes: 1, settlements: 1, inventoryAdjustments: 1 },
+    media: { included: false, note: 'v4' }, data: v4Data,
+  } as any;
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(stableStringify(unsigned)));
+  const value = Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  const parsed = await parseLedgerBackupPackage(JSON.stringify({ ...unsigned, integrity: { algorithm: 'SHA-256', value } }));
+  assert.equal(parsed.schemaVersion, 'dewu-seller-pro/ledger-backup@4');
+  assert.equal(parsed.data.salesOrders, undefined);
 });
 
 test('backup parser rejects unsupported, tampered and count-mismatched packages', async () => {
