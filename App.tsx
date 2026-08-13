@@ -4,11 +4,12 @@ import { AuthScreen } from './components/AuthScreen';
 import { BottomNav } from './components/BottomNav';
 import { Home } from './components/Home';
 import { createDeferredComponent } from './components/DeferredComponent';
-import { Tab, Product, Activity, Warehouse, OutboundFeeSelection } from './types';
+import { Tab, Product, Activity, Warehouse, OutboundExecutionMode, OutboundFeeSelection } from './types';
 import { supabase } from './lib/supabase';
 import { listRecentActivities } from './services/activities';
 import { batchInboundProducts, deleteProduct, deleteProducts, updateProductMetadata } from './services/products';
 import { outboundProduct } from './services/outbound';
+import { createSalesOrder } from './services/salesOrders';
 import { emptyInventoryAnalytics, getInventoryAnalytics } from './services/analytics';
 import { Loader2 } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
@@ -702,24 +703,20 @@ export default function App() {
     }
   };
 
-  const handleOutboundProduct = async (product: Product, price: number, quantity: number, feeSelection: OutboundFeeSelection, operationId: string, platform: string = '得物') => {
+  const handleOutboundProduct = async (product: Product, price: number, quantity: number, feeSelection: OutboundFeeSelection, operationId: string, mode: OutboundExecutionMode, platform: string = '得物') => {
     if (!session?.user?.id) return;
     
     try {
-      await outboundProduct({
-        product,
-        userId: session.user.id,
-        salePrice: price,
-        quantity,
-        platform,
-        feeSelection,
-        operationId,
-      });
+      if (mode === 'sales_order') {
+        await createSalesOrder({ product, userId: session.user.id, unitSalePrice: price, quantity, platform, feeSelection, operationId });
+      } else {
+        await outboundProduct({ product, userId: session.user.id, salePrice: price, quantity, platform, feeSelection, operationId });
+      }
 
       fetchData();
       setRefreshTrigger(prev => prev + 1);
       setShowOutboundModal(false);
-      alert(`出库成功 (x${quantity})`);
+      alert(mode === 'sales_order' ? `销售订单已创建，已预留库存 ${quantity} 件` : `出库成功 (x${quantity})`);
       
     } catch (error: any) {
       console.error('Outbound error:', error);

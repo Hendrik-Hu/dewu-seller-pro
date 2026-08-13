@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, ArrowUpRight, Search, DollarSign, Calculator, Loader2 } from 'lucide-react';
 import { Preferences } from '@capacitor/preferences';
-import type { FeeScheme, OutboundFeeSelection, Product } from '../types';
+import type { FeeScheme, OutboundExecutionMode, OutboundFeeSelection, Product } from '../types';
 import { normalizeOutboundQuantity, normalizeSalePrice } from '../lib/outboundRules';
 import { formatProductSize } from '../lib/productNormalization';
 import { ProductImage } from './ProductImage';
@@ -15,7 +15,7 @@ interface OutboundModalProps {
   isOpen: boolean;
   onClose: () => void;
   userId: string;
-  onOutbound: (product: Product, sellingPrice: number, quantity: number, feeSelection: OutboundFeeSelection, operationId: string) => Promise<void> | void;
+  onOutbound: (product: Product, sellingPrice: number, quantity: number, feeSelection: OutboundFeeSelection, operationId: string, mode: OutboundExecutionMode) => Promise<void> | void;
 }
 
 const createOperationId = () => globalThis.crypto?.randomUUID?.() || `outbound-${Date.now()}`;
@@ -54,6 +54,7 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, u
   const [targetPricingKind, setTargetPricingKind] = useState<TargetPricingKind>('netProfit');
   const [targetPricingValue, setTargetPricingValue] = useState('');
   const [targetPricingRequested, setTargetPricingRequested] = useState(false);
+  const [executionMode, setExecutionMode] = useState<OutboundExecutionMode>('sales_order');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -141,6 +142,7 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, u
       setOperationId(String(draft?.operationId || createOperationId()));
       setSubmitted(Boolean(draft?.submitted));
       setSubmittedSchemeUpdatedAt(String(draft?.submittedSchemeUpdatedAt || ''));
+      setExecutionMode(draft?.executionMode === 'quick_ledger' ? 'quick_ledger' : 'sales_order');
     }).catch(() => {
       setSellingPrice(''); setQuantity(1); setManualFeeEnabled(false); setManualFee(''); setOperationId(createOperationId()); setSubmitted(false); setSubmittedSchemeUpdatedAt('');
     }).finally(() => { if (mounted) { setDraftProductId(selectedProduct.id); setDraftReady(true); } });
@@ -150,9 +152,9 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, u
   useEffect(() => {
     if (!selectedProduct || !draftReady || draftProductId !== selectedProduct.id) return;
     Preferences.set({ key: getDraftKey(userId, selectedProduct.id), value: JSON.stringify({
-      sellingPrice, quantity, selectedSchemeId, manualFeeEnabled, manualFee, operationId, submitted, submittedSchemeUpdatedAt,
+      sellingPrice, quantity, selectedSchemeId, manualFeeEnabled, manualFee, operationId, submitted, submittedSchemeUpdatedAt, executionMode,
     }) }).catch((error) => console.warn('Failed to save outbound draft', error));
-  }, [draftProductId, draftReady, manualFee, manualFeeEnabled, operationId, quantity, selectedProduct, selectedSchemeId, sellingPrice, submitted, submittedSchemeUpdatedAt, userId]);
+  }, [draftProductId, draftReady, executionMode, manualFee, manualFeeEnabled, operationId, quantity, selectedProduct, selectedSchemeId, sellingPrice, submitted, submittedSchemeUpdatedAt, userId]);
 
   const selectedScheme = feeSchemes.find((item) => item.id === selectedSchemeId);
   const feeQuote = useMemo(() => {
@@ -244,9 +246,9 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, u
       const lockedSchemeUpdatedAt = submitted ? submittedSchemeUpdatedAt : selectedScheme?.updatedAt || '';
       setSubmittedSchemeUpdatedAt(lockedSchemeUpdatedAt);
       await Preferences.set({ key: getDraftKey(userId, selectedProduct.id), value: JSON.stringify({
-        sellingPrice, quantity: finalQuantity, selectedSchemeId, manualFeeEnabled, manualFee, operationId, submitted: true, submittedSchemeUpdatedAt: lockedSchemeUpdatedAt,
+        sellingPrice, quantity: finalQuantity, selectedSchemeId, manualFeeEnabled, manualFee, operationId, submitted: true, submittedSchemeUpdatedAt: lockedSchemeUpdatedAt, executionMode,
       }) });
-      await onOutbound(selectedProduct, finalPrice, finalQuantity, selection, operationId);
+      await onOutbound(selectedProduct, finalPrice, finalQuantity, selection, operationId, executionMode);
       await Preferences.remove({ key: getDraftKey(userId, selectedProduct.id) });
       handleClose();
     } catch (error) {
@@ -390,6 +392,14 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, u
             )}
 
             <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+              <div>
+                <label className="mb-2 block text-xs font-medium text-slate-600">记录方式</label>
+                <div className="grid grid-cols-2 gap-1 rounded-lg bg-slate-200/70 p-1">
+                  <button type="button" disabled={submitted} onClick={() => setExecutionMode('sales_order')} className={`app-touch rounded-md px-2 text-xs font-semibold ${executionMode === 'sales_order' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>销售订单</button>
+                  <button type="button" disabled={submitted} onClick={() => setExecutionMode('quick_ledger')} className={`app-touch rounded-md px-2 text-xs font-semibold ${executionMode === 'quick_ledger' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>直接记出库</button>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-slate-500">{executionMode === 'sales_order' ? '先预留库存并进入待发货；确认发货后才形成出库流水。' : '适合已经完成交易的补记场景，会立即扣库存并形成出库流水。'}</p>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-slate-500 mb-1.5">出库数量</label>
@@ -582,7 +592,7 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, u
               disabled={!draftReady || isSubmitting || !sellingPrice.trim() || (manualFeeEnabled && !manualFee.trim())}
               className="app-primary-action sticky bottom-0 z-20 -mx-4 w-[calc(100%+2rem)] space-x-2 rounded-none border-t border-slate-200 bg-green-600 px-4 shadow-[0_-6px_16px_rgba(15,23,42,0.08)] disabled:opacity-40 disabled:active:scale-100"
             >
-              <span>{isSubmitting ? '正在出库...' : submitted ? '核对上次出库' : `确认出库 (x${quantity})`}</span>
+              <span>{isSubmitting ? '正在提交...' : submitted ? '核对上次提交' : executionMode === 'sales_order' ? `创建销售订单 (x${quantity})` : `确认直接出库 (x${quantity})`}</span>
               <ArrowUpRight size={18} />
             </button>
             

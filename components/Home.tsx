@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingBag, Truck, Package, ArrowDownRight, ArrowUpRight, ChevronRight, Clock, Sparkles, UserRound, RefreshCw, Loader2, Warehouse as WarehouseIcon, Plus } from 'lucide-react';
+import { ShoppingBag, Truck, Package, ArrowDownRight, ArrowUpRight, ChevronRight, Clock, Sparkles, UserRound, RefreshCw, Loader2, Warehouse as WarehouseIcon, Plus, ClipboardList } from 'lucide-react';
 import { Activity, Warehouse } from '../types';
 import { getActivityGrossAmount, getActivityQuantity } from '../lib/inventoryMetrics';
 import { formatProductSize } from '../lib/productNormalization';
@@ -7,6 +7,7 @@ import { ProductImage } from './ProductImage';
 import { getActivityTypeLabel } from '../lib/activityPresentation';
 import type { InventoryAnalytics } from '../lib/inventoryMetrics';
 import { createDeferredComponent } from './DeferredComponent';
+import { getSalesOrderTodoSummary, type SalesOrderTodoSummary } from '../services/salesOrders';
 
 const InventoryStatsModal = createDeferredComponent(
   () => import('./InventoryStatsModal').then(({ InventoryStatsModal: component }) => component),
@@ -19,6 +20,10 @@ const AIManagementModal = createDeferredComponent(
 const ActivityLedgerModal = createDeferredComponent(
   () => import('./ActivityLedgerModal').then(({ ActivityLedgerModal: component }) => component),
   { label: '完整流水账本', kind: 'modal' },
+);
+const SalesOrdersModal = createDeferredComponent(
+  () => import('./SalesOrdersModal').then(({ SalesOrdersModal: component }) => component),
+  { label: '销售订单', kind: 'modal' },
 );
 
 interface HomeProps {
@@ -78,6 +83,22 @@ export const Home: React.FC<HomeProps> = ({
   const [showInventoryModal, setShowInventoryModal] = React.useState(false);
   const [showAIModal, setShowAIModal] = React.useState(false);
   const [showActivityLedger, setShowActivityLedger] = React.useState(false);
+  const [showSalesOrders, setShowSalesOrders] = React.useState(false);
+  const [orderSummary, setOrderSummary] = React.useState<SalesOrderTodoSummary | null>(null);
+  const [orderSummaryError, setOrderSummaryError] = React.useState('');
+  const [orderSummaryRetry, setOrderSummaryRetry] = React.useState(0);
+
+  React.useEffect(() => {
+    let active = true;
+    setOrderSummaryError('');
+    getSalesOrderTodoSummary(userId).then((summary) => { if (active) setOrderSummary(summary); }).catch((error) => {
+      if (!active) return;
+      setOrderSummaryError(error instanceof Error ? error.message : '销售订单待办同步失败');
+    });
+    return () => { active = false; };
+  }, [orderSummaryRetry, userId]);
+
+  const orderTodoCount = orderSummary ? orderSummary.shipment + orderSummary.authentication + orderSummary.settlement + orderSummary.exception : null;
 
   const formatTime = (dateString?: string) => {
     if (!dateString) return '';
@@ -182,6 +203,12 @@ export const Home: React.FC<HomeProps> = ({
             <ArrowUpRight size={24} /><span><strong className="block text-base">出库</strong><small className="text-xs text-emerald-100">记录成交与费用</small></span>
           </button>
         </div>
+        <button type="button" onClick={() => setShowSalesOrders(true)} className="app-touch mt-3 flex w-full items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 text-left dark:border-zinc-800 dark:bg-zinc-900" aria-label="打开销售订单待办">
+          <ClipboardList size={21} className="text-teal-600" />
+          <span className="min-w-0 flex-1"><strong className="block text-sm text-slate-900 dark:text-white">销售订单</strong><small className="text-xs text-slate-500">待发货、鉴别、结算与退回</small></span>
+          <span className={`text-sm font-bold ${orderSummaryError ? 'text-rose-500' : 'text-teal-700 dark:text-teal-300'}`}>{orderSummaryError ? '同步失败' : orderTodoCount == null ? '同步中' : `${orderTodoCount} 项`}</span>
+          <ChevronRight size={18} className="text-slate-300" />
+        </button>
         <div className="mt-3 grid grid-cols-2 gap-3">
           <button type="button" onClick={() => setShowInventoryModal(true)} disabled={!analyticsReady} className="app-secondary-action justify-start"><Package size={20} className="text-teal-600" />库存摘要</button>
           <button type="button" onClick={() => setShowAIModal(true)} className="app-secondary-action justify-start"><Sparkles size={20} className="text-violet-600" />AI 分析</button>
@@ -211,6 +238,14 @@ export const Home: React.FC<HomeProps> = ({
           userId={userId}
           warehouses={warehouses}
           onClose={() => setShowActivityLedger(false)}
+        />
+      )}
+
+      {showSalesOrders && (
+        <SalesOrdersModal
+          userId={userId}
+          onClose={() => setShowSalesOrders(false)}
+          onChanged={() => { setOrderSummaryRetry((value) => value + 1); onRetryData(); }}
         />
       )}
 

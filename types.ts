@@ -67,6 +67,46 @@ export interface OutboundSettlementAudit {
   createdAt: string;
 }
 
+export type SalesOrderStatus =
+  | 'pending_shipment'
+  | 'shipped'
+  | 'authenticating'
+  | 'authenticated'
+  | 'settled'
+  | 'canceled'
+  | 'auth_failed'
+  | 'returning'
+  | 'returned'
+  | 'refunded';
+
+export interface SalesOrder {
+  id: string;
+  status: SalesOrderStatus;
+  productId: string;
+  productName: string;
+  brand: string;
+  sku: string;
+  size: string;
+  warehouse: string;
+  quantity: number;
+  unitSalePrice: number;
+  frozenUnitCost: number;
+  platform: string;
+  externalOrderNo?: string;
+  note?: string;
+  feeSnapshot: Record<string, unknown>;
+  estimatedPlatformFee?: number;
+  estimatedNetProceeds?: number;
+  estimatedNetProfit?: number;
+  outboundActivityId?: string;
+  inventoryRestored: boolean;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type OutboundExecutionMode = 'sales_order' | 'quick_ledger';
+
 export interface SalesStat {
   name: string;
   value: number;
