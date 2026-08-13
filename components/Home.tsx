@@ -90,150 +90,103 @@ export const Home: React.FC<HomeProps> = ({
   };
   
   return (
-    <div className="px-5 py-6 pb-24 space-y-6 h-full overflow-y-auto bg-slate-50 dark:bg-black transition-colors duration-300">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">你好！{username}</h1>
-          <p className="text-slate-500 dark:text-zinc-400 text-sm mt-1">今天也要爆单哦 🚀</p>
+    <div className="app-page space-y-5">
+      <header className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-teal-600 dark:text-teal-400">今日经营</p>
+          <h1 className="app-page-title mt-0.5 truncate">你好，{username}</h1>
         </div>
-        <button onClick={onAvatarClick} className="w-10 h-10 rounded-full bg-slate-100 dark:bg-zinc-800 overflow-hidden border border-slate-200 dark:border-zinc-700 active:opacity-80 transition-opacity">
+        <button type="button" onClick={onAvatarClick} aria-label="打开个人中心" className="app-touch h-12 w-12 shrink-0 overflow-hidden rounded-full border border-slate-200 bg-slate-100 dark:border-zinc-700 dark:bg-zinc-800">
           {avatarUrl ? (
             <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
           ) : (
             <UserRound size={20} className="m-auto h-full text-slate-400" aria-label="默认头像" />
           )}
         </button>
-      </div>
+      </header>
 
       {!analyticsReady && !analyticsError && (
-        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">正在同步库存与经营摘要...</div>
+        <div className="app-status-banner border-slate-200 bg-white text-slate-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400"><span className="flex items-center gap-2"><Loader2 size={14} className="animate-spin" />正在同步库存与经营摘要</span></div>
       )}
       {analyticsError && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
+        <div className="app-status-banner border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
           <span>{analyticsReady ? '数据刷新失败，当前显示上次成功结果，可能已过期。' : '库存与经营摘要同步失败，请重试。'}</span>
-          <button type="button" onClick={onRetryData} className="flex shrink-0 items-center gap-1 font-semibold"><RefreshCw size={12} />重试</button>
+          <button type="button" onClick={onRetryData} className="app-touch flex shrink-0 items-center gap-1 font-semibold"><RefreshCw size={14} />重试</button>
         </div>
       )}
 
       {!warehousesReady && (
-        <div className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 text-[11px] ${warehousesError ? 'border-rose-200 bg-rose-50 text-rose-600 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-300' : 'border-slate-200 bg-white text-slate-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400'}`}>
+        <div className={`app-status-banner ${warehousesError ? 'border-rose-200 bg-rose-50 text-rose-600 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-300' : 'border-slate-200 bg-white text-slate-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400'}`}>
           <span className="flex items-center gap-2">{!warehousesError && <Loader2 size={13} className="animate-spin" />}{warehousesError ? '仓库同步失败，尚未把账号判断为空。' : '正在确认你的仓库信息...'}</span>
-          {warehousesError && <button type="button" onClick={onRetryWarehouses} className="shrink-0 font-semibold">重试</button>}
+          {warehousesError && <button type="button" onClick={onRetryWarehouses} className="app-touch shrink-0 font-semibold">重试</button>}
         </div>
       )}
 
       {warehousesReady && warehousesError && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
+        <div className="app-status-banner border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
           <span>仓库刷新失败，当前结果可能已过期。</span>
-          <button type="button" onClick={onRetryWarehouses} className="shrink-0 font-semibold">重新同步</button>
+          <button type="button" onClick={onRetryWarehouses} className="app-touch shrink-0 font-semibold">重新同步</button>
         </div>
       )}
 
       {warehousesReady && !warehousesError && warehouses.length === 0 && (
-        <section className="rounded-2xl border border-dewu-100 bg-white p-4 shadow-sm dark:border-dewu-900/40 dark:bg-zinc-900" aria-labelledby="first-use-title">
+        <section className="app-surface p-4" aria-labelledby="first-use-title">
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-dewu-50 text-dewu-600 dark:bg-dewu-950/40 dark:text-dewu-300">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-dewu-50 text-dewu-600 dark:bg-dewu-950/40 dark:text-dewu-300">
               <WarehouseIcon size={20} />
             </div>
             <div className="min-w-0 flex-1">
-              <h2 id="first-use-title" className="text-sm font-bold text-slate-900 dark:text-white">先建立你的真实库存起点</h2>
-              <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-zinc-400">创建第一个主仓后即可入库。这里不会放入演示商品，首页数字只来自你的真实账本。</p>
+              <h2 id="first-use-title" className="app-section-title">先建立真实库存起点</h2>
+              <p className="app-help-text mt-1">创建第一个主仓后即可入库。首页数字只来自你的真实账本。</p>
             </div>
           </div>
-          <button type="button" onClick={onStartFirstWarehouse} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 py-2.5 text-xs font-bold text-white dark:bg-white dark:text-black" aria-label="创建第一个仓库并继续入库">
+          <button type="button" onClick={onStartFirstWarehouse} className="app-primary-action mt-4" aria-label="创建第一个仓库并继续入库">
             <Plus size={15} />创建第一个仓库
           </button>
         </section>
       )}
 
-      {/* Quick Stats Cards */}
-      <div className="grid grid-cols-2 gap-3">
-        {/* Sales Card */}
-        <div className="bg-gradient-to-br from-dewu-500 to-dewu-600 p-3.5 rounded-xl text-white shadow-lg shadow-dewu-200/20 min-h-[132px]">
-          <div className="flex justify-between items-center mb-3">
-             <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
-              <ShoppingBag size={18} className="text-white" />
-            </div>
-            {/* Simple static trend indicator for now */}
-            <span className="text-[11px] font-medium bg-white/20 px-2 py-0.5 rounded-full text-white">今日实时</span>
-          </div>
-          <div className="space-y-2">
-            <div>
-              <div className="flex items-baseline space-x-1">
-                <span className="text-[30px] leading-none font-bold">{analyticsReady ? `¥ ${todaySalesAmount.toLocaleString()}` : '—'}</span>
-              </div>
-              <div className="text-dewu-50 text-[11px] opacity-90 mt-1">今日销售额</div>
-            </div>
-            
-            <div className="w-full h-px bg-white/20"></div>
-            
-            <div className="flex items-baseline justify-between">
-              <span className="text-dewu-50 text-[11px] opacity-90">销售件数</span>
-              <span className="text-xl leading-none font-bold">{analyticsReady ? todaySalesCount : '—'} <span className="text-[11px] font-normal opacity-80">件</span></span>
-            </div>
-          </div>
+      <section aria-labelledby="today-summary-title">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 id="today-summary-title" className="app-section-title">今日概览</h2>
+          <span className="text-xs text-slate-400">实时账本</span>
         </div>
-
-        {/* Purchasing transit inventory */}
-        <button 
-          onClick={onTransitClick}
-          className="bg-white dark:bg-zinc-900 p-3.5 rounded-xl border border-slate-100 dark:border-zinc-800 shadow-sm min-h-[132px] group active:scale-95 transition-all text-left"
-        >
-          <div className="w-full flex justify-between items-center mb-3">
-            <div className="bg-orange-50 dark:bg-orange-900/20 p-2 rounded-lg group-hover:bg-orange-100 dark:group-hover:bg-orange-900/30 transition-colors">
-              <Truck size={18} className="text-orange-500" />
+        <div className="app-surface overflow-hidden">
+          <div className="flex items-center gap-3 border-b border-slate-100 p-4 dark:border-zinc-800">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-600 dark:bg-teal-950/30 dark:text-teal-300"><ShoppingBag size={20} /></div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-slate-500 dark:text-zinc-400">今日销售额</p>
+              <p className="mt-1 truncate text-[28px] font-bold leading-8 text-slate-950 dark:text-white">{analyticsReady ? `¥ ${todaySalesAmount.toLocaleString()}` : '—'}</p>
             </div>
-            <ChevronRight size={14} className="text-slate-300 dark:text-zinc-600 group-hover:text-slate-400" />
+            <div className="shrink-0 text-right">
+              <p className="text-xs text-slate-500 dark:text-zinc-400">已售</p>
+              <p className="mt-1 text-xl font-bold">{analyticsReady ? `${todaySalesCount} 件` : '—'}</p>
+            </div>
           </div>
-          <div className="space-y-1.5">
-            <div className="text-[42px] leading-none font-bold text-slate-900 dark:text-white">{analyticsReady ? transitProductCount : '—'}</div>
-            <div className="text-slate-400 dark:text-zinc-500 text-[11px]">采购运输中</div>
-          </div>
-        </button>
-      </div>
-
-      {/* Action Grid */}
-      <div>
-        <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-3 px-1">快速功能</h3>
-        <div className="bg-white dark:bg-zinc-900 rounded-2xl p-4 border border-slate-100 dark:border-zinc-800 shadow-sm grid grid-cols-4 gap-4">
-          <button onClick={onInboundClick} className="flex flex-col items-center space-y-2 active:opacity-60 transition-opacity">
-            <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl">
-              <ArrowDownRight size={20} className="text-blue-500" />
-            </div>
-            <span className="text-xs font-medium text-slate-600 dark:text-zinc-300">入库</span>
-          </button>
-          <button onClick={onOutboundClick} className="flex flex-col items-center space-y-2 active:opacity-60 transition-opacity">
-            <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-xl">
-              <ArrowUpRight size={20} className="text-green-500" />
-            </div>
-            <span className="text-xs font-medium text-slate-600 dark:text-zinc-300">出库</span>
-          </button>
-          
-          {/* Inventory Button - Trigger Modal */}
-          <button 
-            onClick={() => setShowInventoryModal(true)} 
-            disabled={!analyticsReady}
-            className="flex flex-col items-center space-y-2 active:opacity-60 transition-opacity"
-          >
-            <div className="bg-purple-50 dark:bg-purple-900/20 p-3 rounded-xl">
-              <Package size={20} className="text-purple-500" />
-            </div>
-            <span className="text-xs font-medium text-slate-600 dark:text-zinc-300">库存</span>
-          </button>
-          
-          <button 
-            onClick={() => setShowAIModal(true)}
-            className="flex flex-col items-center space-y-2 active:opacity-60 transition-opacity"
-          >
-            <div className="bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-xl relative overflow-hidden group">
-              <Sparkles size={20} className="text-indigo-500 relative z-10" />
-              <div className="absolute inset-0 bg-indigo-100 dark:bg-indigo-900/40 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-            </div>
-            <span className="text-xs font-medium text-slate-600 dark:text-zinc-300">AI 助手</span>
+          <button type="button" onClick={onTransitClick} className="app-touch flex w-full items-center gap-3 px-4 py-2 text-left active:bg-orange-50 dark:active:bg-orange-950/20" aria-label={`查看采购运输中商品，当前 ${analyticsReady ? transitProductCount : '未同步'} 件`}>
+            <Truck size={20} className="text-orange-500" />
+            <span className="flex-1 text-sm font-semibold">采购运输中</span>
+            <span className="text-sm font-bold text-orange-600 dark:text-orange-400">{analyticsReady ? `${transitProductCount} 件` : '—'}</span>
+            <ChevronRight size={18} className="text-slate-400" />
           </button>
         </div>
-      </div>
+      </section>
+
+      <section aria-labelledby="quick-action-title">
+        <h2 id="quick-action-title" className="app-section-title mb-3">开始记账</h2>
+        <div className="grid grid-cols-2 gap-3">
+          <button type="button" onClick={onInboundClick} className="app-touch flex min-h-16 items-center gap-3 rounded-lg bg-blue-600 px-4 text-left text-white active:bg-blue-700">
+            <ArrowDownRight size={24} /><span><strong className="block text-base">入库</strong><small className="text-xs text-blue-100">记录采购与到仓</small></span>
+          </button>
+          <button type="button" onClick={onOutboundClick} className="app-touch flex min-h-16 items-center gap-3 rounded-lg bg-emerald-600 px-4 text-left text-white active:bg-emerald-700">
+            <ArrowUpRight size={24} /><span><strong className="block text-base">出库</strong><small className="text-xs text-emerald-100">记录成交与费用</small></span>
+          </button>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <button type="button" onClick={() => setShowInventoryModal(true)} disabled={!analyticsReady} className="app-secondary-action justify-start"><Package size={20} className="text-teal-600" />库存摘要</button>
+          <button type="button" onClick={() => setShowAIModal(true)} className="app-secondary-action justify-start"><Sparkles size={20} className="text-violet-600" />AI 分析</button>
+        </div>
+      </section>
 
       {/* Inventory Stats Modal */}
       {showInventoryModal && (
@@ -261,49 +214,48 @@ export const Home: React.FC<HomeProps> = ({
         />
       )}
 
-      {/* Recent Activity */}
-      <div>
-        <div className="flex justify-between items-center px-1 mb-3">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">最近动态 (近10条)</h3>
-          <button onClick={() => setShowActivityLedger(true)} className="flex items-center gap-0.5 text-xs font-medium text-dewu-600 dark:text-dewu-400">
+      <section aria-labelledby="recent-activity-title">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 id="recent-activity-title" className="app-section-title">最近流水</h2>
+          <button type="button" onClick={() => setShowActivityLedger(true)} className="app-touch -mr-2 flex items-center gap-1 px-2 text-sm font-semibold text-dewu-600 dark:text-dewu-400">
             查看全部 <ChevronRight size={13} />
           </button>
         </div>
-        <div className="space-y-3">
+        <div className="app-list-surface">
           {recentActivitiesReady && recentActivitiesError && (
-            <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
+            <div className="app-status-banner m-3 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
               <span>最近动态刷新失败，当前显示上次成功结果，可能已过期。</span>
               <button type="button" onClick={onRetryData} className="shrink-0 font-semibold">重试</button>
             </div>
           )}
           {!recentActivitiesReady && !recentActivitiesError ? (
-            <div className="flex items-center justify-center gap-2 rounded-2xl border border-slate-100 bg-white px-4 py-8 text-xs text-slate-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-500">
+            <div className="flex items-center justify-center gap-2 px-4 py-10 text-sm text-slate-400 dark:text-zinc-500">
               <Loader2 size={14} className="animate-spin" />正在同步最近动态...
             </div>
           ) : !recentActivitiesReady && recentActivitiesError ? (
-            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-5 text-center text-xs text-rose-600 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-300">
+            <div className="m-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-5 text-center text-sm text-rose-600 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-300">
               <p>最近动态加载失败，没有用空数据替代。</p>
               <button type="button" onClick={onRetryData} className="mt-2 inline-flex items-center gap-1 font-semibold"><RefreshCw size={12} />重新加载</button>
             </div>
           ) : activities.length === 0 ? (
-            <div className="text-center py-8 text-slate-400 text-xs bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800">
+            <div className="py-10 text-center text-sm text-slate-400">
               暂无动态
             </div>
           ) : (
             activities.slice(0, 10).map((activity) => (
-              <div key={activity.id} className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-slate-100 dark:border-zinc-800 shadow-sm flex items-center space-x-3">
-                <ProductImage src={activity.imageUrl} alt={activity.productName} className="w-12 h-12 rounded-lg object-cover bg-slate-100 dark:bg-zinc-800" />
+              <div key={activity.id} className="flex min-h-[72px] items-center gap-3 border-b border-slate-100 px-3 py-3 last:border-b-0 dark:border-zinc-800">
+                <ProductImage src={activity.imageUrl} alt={activity.productName} className="h-12 w-12 shrink-0 rounded-lg bg-slate-100 object-cover dark:bg-zinc-800" />
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-start">
                     <h4 className="text-sm font-semibold text-slate-900 dark:text-white line-clamp-1">{activity.productName}</h4>
-                    <span className="text-[10px] font-medium text-slate-400 dark:text-zinc-500 flex items-center">
-                      <Clock size={10} className="mr-1" />
+                    <span className="flex items-center text-xs font-medium text-slate-400 dark:text-zinc-500">
+                      <Clock size={12} className="mr-1" />
                       {formatTime(activity.createdAt || activity.created_at)}
                     </span>
                   </div>
                   <div className="flex justify-between items-end mt-1">
                     <div className="flex items-center space-x-2">
-                       <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                       <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${
                          activity.type === 'inbound'
                            ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
                            : activity.type === 'pending'
@@ -332,9 +284,7 @@ export const Home: React.FC<HomeProps> = ({
                     </div>
                     {!['restore', 'transfer'].includes(activity.type) && <div className="text-right">
                       <span className="text-sm font-bold text-dewu-600 dark:text-dewu-400">¥{getActivityGrossAmount(activity)}</span>
-                      {getActivityQuantity(activity) > 1 && (
-                        <div className="text-[10px] text-slate-400 dark:text-zinc-500">单价 ¥{activity.price}</div>
-                      )}
+                      {getActivityQuantity(activity) > 1 && <div className="text-xs text-slate-400 dark:text-zinc-500">单价 ¥{activity.price}</div>}
                     </div>}
                   </div>
                 </div>
@@ -342,7 +292,7 @@ export const Home: React.FC<HomeProps> = ({
             ))
           )}
         </div>
-      </div>
+      </section>
     </div>
   );
 };

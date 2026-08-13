@@ -264,15 +264,16 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, u
   const totalCatalogPages = Math.max(1, Math.ceil(catalogTotal / 20));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-[fadeIn_0.2s_ease-out]">
-      <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-        <div className="flex justify-between items-center p-4 border-b border-slate-100 flex-shrink-0">
+    <div className="app-task-shell animate-[fadeIn_0.2s_ease-out]">
+      <div className="app-task-panel">
+        <div className="app-task-header">
           <h2 className="text-lg font-bold text-slate-900">
             {selectedProduct ? '确认出库信息' : '商品出库'}
           </h2>
           <button 
             onClick={handleClose}
-            className="text-slate-400 hover:text-slate-600 p-1"
+            className="app-icon-button border-0 bg-transparent text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            aria-label="关闭出库"
           >
             <X size={20} />
           </button>
@@ -280,7 +281,7 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, u
         
         {!selectedProduct ? (
           <>
-            <div className="p-3 border-b border-slate-100 bg-slate-50 flex-shrink-0">
+            <div className="border-b border-slate-100 bg-slate-50 p-4 flex-shrink-0">
                <div className="relative">
                   <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
                   <input 
@@ -289,12 +290,12 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, u
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     autoFocus
-                    className="w-full bg-white text-sm text-slate-900 rounded-xl pl-9 pr-4 py-2 outline-none border border-slate-200 focus:border-dewu-500 transition-all"
+                    className="app-form-control bg-white pl-9"
                   />
                 </div>
             </div>
 
-            <div className="overflow-y-auto p-4 space-y-3 min-h-[200px]">
+            <div className="min-h-[200px] space-y-0 overflow-y-auto p-4">
               {(catalogLoading || searchPending) && (
                 <div className="flex items-center justify-center gap-2 py-10 text-xs text-slate-400"><Loader2 size={16} className="animate-spin" />正在查询在库商品...</div>
               )}
@@ -312,24 +313,25 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, u
               )}
               {!catalogLoading && !searchPending && !catalogError && catalogProducts.length > 0 && (
                 <>
-                  <div className="flex items-center justify-between text-[11px] text-slate-400">
+                  <div className="flex items-center justify-between pb-2 text-xs text-slate-500">
                     <span>{hasSearch ? `找到 ${catalogTotal} 条库存` : '最近在库商品'}</span>
                     <span>{catalogPage}/{totalCatalogPages}</span>
                   </div>
                   {catalogProducts.map(product => (
-                  <div key={product.id} className="flex items-center space-x-3 bg-white p-2 rounded-xl border border-slate-100 shadow-sm animate-[fadeIn_0.2s_ease-out]">
+                  <div key={product.id} className="flex min-h-[80px] items-center space-x-3 border-b border-slate-100 bg-white p-3 animate-[fadeIn_0.2s_ease-out]">
                     <ProductImage src={product.imageUrl} alt={product.name} className="w-14 h-14 rounded-lg object-cover bg-slate-100" />
                     <div className="flex-1 min-w-0">
-                      <h4 className="text-xs font-bold text-slate-900 truncate">{product.name}</h4>
-                      <p className="text-[10px] text-slate-400 mt-0.5">{product.brand} · {formatProductSize(product.size)} · 库存 {product.stock}</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">{product.sku}{product.source ? ` · ${product.source}` : ''}</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">{product.warehouse || '未设置仓库'} · 成本 ¥{product.price}</p>
+                      <h4 className="truncate text-sm font-bold text-slate-900">{product.name}</h4>
+                      <p className="mt-1 text-xs text-slate-500">{product.brand} · {formatProductSize(product.size)} · 库存 {product.stock}</p>
+                      <p className="mt-1 text-xs text-slate-500">{product.sku}{product.source ? ` · ${product.source}` : ''}</p>
+                      <p className="mt-1 text-xs text-slate-500">{product.warehouse || '未设置仓库'} · 成本 ¥{product.price}</p>
                     </div>
                     <button 
                       onClick={() => {
                         selectProduct(product);
                       }}
-                      className="bg-slate-900 text-white p-2 rounded-lg active:scale-95 transition-transform"
+                      className="app-icon-button border-0 bg-green-600 text-white active:scale-95"
+                      aria-label={`选择 ${product.name} 出库`}
                     >
                       <ArrowUpRight size={18} />
                     </button>
@@ -346,16 +348,16 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, u
             </div>
           </>
         ) : (
-          <div className="p-6 space-y-6 overflow-y-auto">
+          <div className="app-task-body space-y-5">
             <div className="flex items-start space-x-4">
                <ProductImage src={selectedProduct.imageUrl} alt={selectedProduct.name} className="w-20 h-20 rounded-xl object-cover bg-slate-100 shadow-sm" />
                <div>
                   <h3 className="font-bold text-slate-900 text-sm">{selectedProduct.name}</h3>
                   <p className="text-xs text-slate-500 mt-1">{selectedProduct.sku}</p>
-                  <p className="text-[11px] text-slate-400 mt-1">{selectedProduct.warehouse || '未设置仓库'}</p>
+                  <p className="mt-1 text-xs text-slate-500">{selectedProduct.warehouse || '未设置仓库'}</p>
                   <div className="flex items-center space-x-2 mt-2">
-                    <span className="bg-slate-100 text-slate-600 text-[10px] px-2 py-1 rounded font-medium">{formatProductSize(selectedProduct.size)}</span>
-                    <span className="bg-orange-50 text-orange-600 text-[10px] px-2 py-1 rounded font-medium">库存 {selectedProduct.stock}</span>
+                    <span className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">{formatProductSize(selectedProduct.size)}</span>
+                    <span className="rounded bg-orange-50 px-2 py-1 text-xs font-medium text-orange-600">库存 {selectedProduct.stock}</span>
                   </div>
                </div>
             </div>
@@ -456,7 +458,7 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, u
                    </div>
                 )}
                 {!sellingPrice.trim() && (
-                  <div className="mt-2 text-[11px] text-amber-600">请填写真实成交单价，系统不会使用成本价代替。</div>
+                  <div className="mt-2 text-xs text-amber-600">请填写真实成交单价，系统不会使用成本价代替。</div>
                 )}
               </div>
 
@@ -476,7 +478,7 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, u
                   type="button"
                   onClick={() => { setTargetPricingOpen((current) => !current); setTargetPricingRequested(false); }}
                   disabled={submitted}
-                  className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 py-2 text-xs font-semibold text-teal-700 disabled:opacity-50"
+                  className="app-touch mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 text-xs font-semibold text-teal-700 disabled:opacity-50"
                 >
                   <Calculator size={14} />反算售价
                 </button>
@@ -569,7 +571,7 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, u
               ) : <div className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-700">{feeQuotePresentation.message}</div>
             )}
 
-            <p className="text-[10px] leading-4 text-slate-400">费用仅为估算，实际金额以平台出价页和订单结算明细为准。</p>
+            <p className="text-xs leading-5 text-slate-500">费用仅为估算，实际金额以平台出价页和订单结算明细为准。</p>
 
             {validationError && (
               <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{validationError}</div>
@@ -578,7 +580,7 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, u
             <button 
               onClick={handleConfirmOutbound}
               disabled={!draftReady || isSubmitting || !sellingPrice.trim() || (manualFeeEnabled && !manualFee.trim())}
-              className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl active:scale-95 transition-all shadow-lg shadow-slate-200 flex items-center justify-center space-x-2 disabled:opacity-40 disabled:active:scale-100"
+              className="app-primary-action sticky bottom-0 z-20 -mx-4 w-[calc(100%+2rem)] space-x-2 rounded-none border-t border-slate-200 bg-green-600 px-4 shadow-[0_-6px_16px_rgba(15,23,42,0.08)] disabled:opacity-40 disabled:active:scale-100"
             >
               <span>{isSubmitting ? '正在出库...' : submitted ? '核对上次出库' : `确认出库 (x${quantity})`}</span>
               <ArrowUpRight size={18} />
@@ -587,7 +589,7 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, u
             <button 
               onClick={() => { if (!submitted) setSelectedProduct(null); }}
               disabled={submitted}
-              className="w-full text-slate-400 text-xs py-2 hover:text-slate-600"
+              className="app-secondary-action w-full text-xs text-slate-500 hover:text-slate-700"
             >
               返回重新选择
             </button>

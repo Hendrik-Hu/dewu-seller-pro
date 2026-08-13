@@ -439,21 +439,21 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-[fadeIn_0.2s_ease-out]">
-      <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden max-h-[88vh] flex flex-col">
-        <div className="flex justify-between items-center p-4 border-b border-slate-100">
+    <div className="app-task-shell animate-[fadeIn_0.2s_ease-out]">
+      <div className="app-task-panel">
+        <div className="app-task-header">
           <div>
             <h2 className="text-lg font-bold text-slate-900">{initialData ? '编辑商品资料' : '新增库存商品'}</h2>
             {!initialData && (
-              <p className="text-[11px] text-slate-400 mt-0.5">草稿会在切换 App 或离开页面时自动保存</p>
+              <p className="mt-0.5 text-xs text-slate-500">草稿会在切换 App 或离开页面时自动保存</p>
             )}
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1">
+          <button onClick={onClose} className="app-icon-button border-0 bg-transparent text-slate-400 hover:bg-slate-100 hover:text-slate-600" aria-label="关闭入库">
             <X size={20} />
           </button>
         </div>
 
-        <div className="p-5 space-y-4 overflow-y-auto">
+        <div className="app-task-body flex flex-col gap-4">
           <input
             ref={photoInputRef}
             type="file"
@@ -463,25 +463,25 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             onChange={handlePhotoChange}
           />
 
-          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4">
+          <div className="order-[20] rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="text-xs font-semibold text-slate-700">商品主图 <span className="text-slate-400 font-normal">选填</span></div>
-                <div className="text-[11px] text-slate-400 mt-1">{initialData ? '名称、品牌和主图同步到同货号全部尺码；库位与来源仅修改当前仓库变体。' : '支持 JPEG、PNG、WebP，原图不超过 20 MB；照片会压缩并随草稿恢复。'}</div>
+                <div className="text-sm font-semibold text-slate-700">商品主图 <span className="font-normal text-slate-400">选填</span></div>
+                <div className="mt-1 text-xs leading-5 text-slate-500">{initialData ? '名称、品牌和主图同步到同货号全部尺码；库位与来源仅修改当前仓库变体。' : '支持 JPEG、PNG、WebP；照片会压缩并随草稿恢复。'}</div>
               </div>
               <button
                 type="button"
                 onClick={() => photoInputRef.current?.click()}
                 disabled={photoProcessing}
-                className="shrink-0 flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-medium text-white active:scale-95 transition-transform disabled:opacity-50"
+                className="app-touch flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white active:scale-95 disabled:opacity-50"
               >
                 <Camera size={16} />
                 {photoProcessing ? '处理中' : '拍照'}
               </button>
             </div>
             {previewImage ? (
-              <div className="mt-3 relative">
-                <img src={previewImage} alt="商品预览" className="h-32 w-full rounded-xl object-cover bg-slate-200" />
+              <div className="relative mt-3 w-24">
+                <img src={previewImage} alt="商品预览" className="h-20 w-24 rounded-lg bg-slate-200 object-cover" />
                 {photoPreviewUrl && (
                   <span className="absolute bottom-2 left-2 rounded-md bg-black/60 px-2 py-1 text-[10px] text-white">
                     已压缩 · 草稿可恢复
@@ -500,15 +500,14 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                       previousImageStorageRef: undefined,
                     });
                   }}
-                  className="absolute top-2 right-2 rounded-full bg-black/55 p-1 text-white"
+                  className="app-icon-button absolute -right-3 -top-3 h-10 min-h-10 w-10 min-w-10 border-0 bg-black/60 text-white"
+                  aria-label="移除商品图片"
                 >
                   <X size={14} />
                 </button>
               </div>
             ) : (
-              <div className="mt-3 h-24 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-xs text-slate-400">
-                暂无商品图片
-              </div>
+              <p className="mt-2 text-xs text-slate-400">暂未添加图片</p>
             )}
           </div>
 
@@ -522,7 +521,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 <div><div className="text-slate-400">库存</div><div className="mt-0.5 font-medium text-slate-700">{initialData.stock}</div></div>
                 <div><div className="text-slate-400">平均成本</div><div className="mt-0.5 font-medium text-slate-700">¥{initialData.price.toFixed(2)}</div></div>
               </div>
-              <p className="mt-2 text-[10px] leading-4 text-amber-600">货号、尺码和仓库不可在资料编辑中修改；移动仓库请用调拨，库存和成本请用盘点调整。</p>
+              <p className="mt-2 text-xs leading-5 text-amber-600">货号、尺码和仓库不可在资料编辑中修改；移动仓库请用调拨，库存和成本请用盘点调整。</p>
             </div>
           ) : <div className="relative">
             <label className="block text-xs font-medium text-slate-500 mb-1">
@@ -531,7 +530,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             <input
               ref={skuInputRef}
               type="text"
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-dewu-500 transition-colors uppercase"
+              className="app-form-control uppercase"
               placeholder="DD1391-100"
               value={productData.sku}
               onFocus={() => setShowSkuSuggestions(true)}
@@ -541,7 +540,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 setShowSkuSuggestions(true);
               }}
             />
-            <div className="mt-1 text-[11px] text-slate-400">输入后仅联想当前账号库存中已有的货号，最多显示 5 条。</div>
+            <div className="mt-1 text-xs text-slate-500">输入后仅联想当前账号库存中已有的货号，最多 5 条。</div>
             {showSkuSuggestions && (skuSuggestionsLoading || skuSuggestionsError || skuSuggestions.length > 0) && (
               <div className="absolute z-10 mt-2 w-full rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden">
                 {skuSuggestionsLoading && <div className="px-3 py-2.5 text-[11px] text-slate-400">正在查询已有货号...</div>}
@@ -568,7 +567,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             </label>
             <input
               type="text"
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-dewu-500 transition-colors"
+              className="app-form-control"
               placeholder="例如: Nike Dunk Low Panda"
               value={productData.name}
               onChange={(event) => updateProductData({ name: event.target.value })}
@@ -581,7 +580,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 所属仓库 <span className="text-rose-500">必填</span>
               </label>
               <select
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-dewu-500 transition-colors"
+                className="app-form-control"
                 value={productData.warehouse}
                 onChange={(event) => updateProductData({ warehouse: event.target.value })}
               >
@@ -597,7 +596,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
               </label>
               <input
                 type="text"
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-dewu-500 transition-colors"
+                className="app-form-control"
                 placeholder="A-01"
                 value={productData.location || ''}
                 onChange={(event) => updateProductData({ location: event.target.value })}
@@ -609,10 +608,10 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             <div>
               <div className="mb-1 text-xs font-medium text-slate-500">入库状态 <span className="text-rose-500">必填</span></div>
               <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-1.5">
-                <button type="button" onClick={() => updateProductData({ status: 'instock' })} className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium transition-colors ${productData.status !== 'shipping' ? 'bg-white text-dewu-600 shadow-sm' : 'text-slate-500'}`}><PackageCheck size={14} />直接入仓</button>
-                <button type="button" onClick={() => updateProductData({ status: 'shipping' })} className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium transition-colors ${productData.status === 'shipping' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500'}`}><Truck size={14} />采购运输中</button>
+                <button type="button" onClick={() => updateProductData({ status: 'instock' })} className={`app-touch flex items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-medium transition-colors ${productData.status !== 'shipping' ? 'bg-white text-dewu-600 shadow-sm' : 'text-slate-500'}`}><PackageCheck size={14} />直接入仓</button>
+                <button type="button" onClick={() => updateProductData({ status: 'shipping' })} className={`app-touch flex items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-medium transition-colors ${productData.status === 'shipping' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500'}`}><Truck size={14} />采购运输中</button>
               </div>
-              <p className="mt-1 text-[10px] leading-4 text-slate-400">{productData.status === 'shipping' ? '运输中商品不计入可售库存，收货后需在首页“采购运输中”确认到仓。' : '直接入仓后立即计入可售库存。'}</p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">{productData.status === 'shipping' ? '运输中商品不计入可售库存，收货后需在首页“采购运输中”确认到仓。' : '直接入仓后立即计入可售库存。'}</p>
             </div>
           )}
 
@@ -622,7 +621,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             </label>
             <input
               type="text"
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-dewu-500 transition-colors"
+              className="app-form-control"
               placeholder="例如：得物自有、线下档口、同行调货"
               value={productData.source || ''}
               onChange={(event) => updateProductData({ source: event.target.value })}
@@ -635,7 +634,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             </label>
             <input
               type="text"
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-dewu-500 transition-colors"
+              className="app-form-control"
               placeholder="Nike"
               value={productData.brand}
               onChange={(event) => updateProductData({ brand: event.target.value })}
@@ -649,7 +648,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
               </label>
               <input
                 type="text"
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-dewu-500 transition-colors"
+                className="app-form-control"
                 placeholder="42"
                 value={productData.size}
                 onChange={(event) => updateProductData({ size: event.target.value })}
@@ -661,7 +660,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
               </label>
               <input
                 type="number"
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-dewu-500 transition-colors"
+                className="app-form-control"
                 placeholder="0.00"
                 value={productData.price ?? ''}
                 onChange={(event) => updateProductData({ price: event.target.value === '' ? undefined : parseFloat(event.target.value) })}
@@ -673,7 +672,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
               </label>
               <input
                 type="number"
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-dewu-500 transition-colors"
+                className="app-form-control"
                 placeholder="0"
                 value={productData.stock ?? ''}
                 onChange={(event) => updateProductData({ stock: event.target.value === '' ? undefined : parseInt(event.target.value, 10) })}
@@ -731,11 +730,12 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             </div>
           )}
 
-          <div className="mt-4 flex space-x-3">
+          <div className="order-[30] sticky bottom-0 z-20 -mx-4 -mb-4 mt-2 flex space-x-3 border-t border-slate-200 bg-white/95 p-4 backdrop-blur">
             {initialData && (
               <button
                 onClick={handleDelete}
-                className="bg-red-50 text-red-500 p-3 rounded-xl flex items-center justify-center active:scale-95 transition-all border border-red-100"
+                className="app-icon-button border-red-100 bg-red-50 text-red-500 active:scale-95"
+                aria-label="移入回收站"
               >
                 <Trash2 size={20} />
               </button>
@@ -744,7 +744,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             <button
               onClick={handleSave}
               disabled={photoProcessing}
-              className="flex-1 bg-slate-900 text-white font-medium py-3 rounded-xl flex items-center justify-center space-x-2 active:scale-95 transition-all shadow-lg shadow-slate-200"
+              className="app-primary-action flex-1 space-x-2 bg-blue-600 active:scale-[0.99]"
             >
               <Save size={18} />
               <span>{initialData ? '保存修改' : additionalVariants.length > 0 ? `批量入库 ${additionalVariants.length + 1} 个尺码` : '保存入库'}</span>

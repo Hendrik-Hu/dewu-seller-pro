@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { ArrowRightLeft, Search, Plus, Boxes, CircleDollarSign, Warehouse as WarehouseIcon, ChevronDown, ChevronLeft, ChevronRight, Check, MapPin, Trash2, Edit, X, Loader2, Star, CheckCircle2, Circle, Scale } from 'lucide-react';
+import { ArrowRightLeft, Search, Plus, Boxes, CircleDollarSign, Warehouse as WarehouseIcon, ChevronDown, ChevronLeft, ChevronRight, Check, MapPin, Trash2, Edit, X, Loader2, Star, CheckCircle2, Circle, Scale, MoreVertical } from 'lucide-react';
 import { Product, Warehouse } from '../types';
 import { supabase } from '../lib/supabase';
 import { listProducts, searchProductGroups } from '../services/products';
@@ -514,7 +514,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
 
   return (
     <div
-      className="flex flex-col h-full bg-slate-50 dark:bg-black relative transition-colors duration-300"
+      className="relative flex h-full flex-col bg-slate-50 transition-colors duration-300 dark:bg-black"
       onClick={() => {
         if (!isSelectionMode) {
           setActiveProductId(null);
@@ -522,9 +522,9 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
       }}
     >
       {/* Sticky Header */}
-      <div className="sticky top-0 z-30 bg-slate-50 dark:bg-black px-5 pt-4 pb-2 shadow-sm transition-colors duration-300" onClick={(e) => e.stopPropagation()}>
+      <div className="sticky top-0 z-30 border-b border-slate-200/80 bg-slate-50/95 px-4 pb-2 pt-4 backdrop-blur transition-colors duration-300 dark:border-zinc-800 dark:bg-black/95" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-4">
-            <h1 className="text-xl font-bold text-slate-900 dark:text-white">库存管理</h1>
+            <h1 className="app-page-title">库存管理</h1>
             <div className="relative">
               <button 
                 onClick={() => {
@@ -537,8 +537,8 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                 disabled={!warehousesReady}
                 title={warehouses.length === 0 ? '添加仓库' : '选择仓库'}
                 className={`${warehouses.length === 0
-                  ? "flex h-9 w-9 items-center justify-center rounded-full border border-dashed border-dewu-300 bg-white text-dewu-600 shadow-sm dark:border-dewu-700 dark:bg-zinc-900 dark:text-dewu-400"
-                  : "flex items-center space-x-1.5 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 pl-3 pr-2 py-1.5 rounded-full text-xs font-bold text-slate-700 dark:text-zinc-200 shadow-sm active:bg-slate-50 dark:active:bg-zinc-800 transition-colors"} disabled:cursor-not-allowed disabled:opacity-40`}
+                  ? "app-icon-button border-dashed border-dewu-300 bg-white text-dewu-600 dark:border-dewu-700 dark:bg-zinc-900 dark:text-dewu-400"
+                  : "app-touch flex items-center space-x-1.5 rounded-lg border border-slate-200 bg-white pl-3 pr-2 text-xs font-bold text-slate-700 transition-colors active:bg-slate-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:active:bg-zinc-800"} disabled:cursor-not-allowed disabled:opacity-40`}
               >
                   {warehouses.length === 0 ? <Plus size={17} /> : <>
                     <WarehouseIcon size={12} className="text-slate-400 dark:text-zinc-500" />
@@ -698,7 +698,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
             </div>
         </div>
         {warehousesReady && warehousesError && (
-          <div className="mb-3 flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
+          <div className="app-status-banner mb-3 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
             <span>仓库列表刷新失败，当前显示上次成功结果，可能已过期。</span>
             <button type="button" onClick={onRetryWarehouses} className="shrink-0 font-semibold">重试</button>
           </div>
@@ -706,12 +706,12 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
         
         {/* Inventory Overview */}
         {inventoryStatsError && (
-          <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
+          <div className="app-status-banner mb-2 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
             <span>{hasCurrentInventoryStats ? '仓库摘要刷新失败，当前显示上次成功结果。' : '仓库摘要加载失败，暂不显示为 0。'}</span>
             <button type="button" onClick={() => setInventoryStatsRetry((value) => value + 1)} className="shrink-0 font-semibold">重试</button>
           </div>
         )}
-        <div className="mb-3 grid grid-cols-2 gap-2 rounded-xl bg-slate-900 p-2 text-white shadow-lg shadow-slate-200/70 dark:bg-zinc-900 dark:shadow-none">
+        <div className="app-surface mb-3 grid grid-cols-2 overflow-hidden p-0">
           {[
             {
               key: 'total-count',
@@ -753,13 +753,13 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
             return (
               <div
                 key={stat.key}
-                className="rounded-lg border border-white/8 bg-white/[0.04] px-2.5 py-2 dark:border-white/5 dark:bg-white/[0.03]"
+                className="min-w-0 border-b border-r border-slate-100 px-3 py-2.5 last:border-r-0 dark:border-zinc-800"
               >
-                <div className="flex items-center gap-1.5 text-[10px] font-medium leading-tight text-slate-300/90 dark:text-zinc-300/90">
-                  <Icon size={11} className="shrink-0 opacity-80" />
+                <div className="flex items-center gap-1.5 text-xs font-medium leading-tight text-slate-500 dark:text-zinc-400">
+                  <Icon size={14} className="shrink-0 text-slate-400" />
                   <span className="truncate">{stat.label}</span>
                 </div>
-                <div className="mt-1 text-[18px] font-bold leading-none tracking-tight text-white">
+                <div className="mt-1.5 truncate text-xl font-bold leading-none text-slate-950 dark:text-white">
                   {stat.value}
                 </div>
               </div>
@@ -767,7 +767,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
           })}
         </div>
         
-        <div className="bg-white dark:bg-zinc-900 rounded-xl p-1 shadow-sm border border-slate-200 dark:border-zinc-800 mb-3">
+        <div className="app-surface mb-3 p-1">
             {/* Search Bar */}
             <div className="relative">
             <Search className="absolute left-3 top-2.5 text-slate-400 dark:text-zinc-500" size={18} />
@@ -779,7 +779,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                     setCurrentPage(1); // Reset to first page on search
                 }}
                 placeholder="搜索货号、名称、品牌..." 
-                className="w-full bg-transparent text-sm text-slate-900 dark:text-white rounded-lg pl-10 pr-4 py-2 outline-none"
+                className="min-h-12 w-full rounded-lg bg-transparent py-2 pl-10 pr-12 text-sm text-slate-900 outline-none dark:text-white"
             />
             {searchQuery && (
                 <button 
@@ -787,7 +787,8 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                         setSearchQuery('');
                         setCurrentPage(1);
                     }}
-                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300"
+                    className="app-icon-button absolute right-0 top-0 border-0 bg-transparent text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300"
+                    aria-label="清空搜索"
                 >
                     <X size={16} />
                 </button>
@@ -804,7 +805,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                 setFilter(label === '全部' ? 'all' : label);
                 setCurrentPage(1); // Reset page on filter
               }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+              className={`app-touch rounded-lg px-4 text-xs font-medium whitespace-nowrap transition-colors ${
                 (filter === 'all' && label === '全部') || filter === label 
                   ? 'bg-slate-900 dark:bg-zinc-800 text-white' 
                   : 'bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400'
@@ -849,7 +850,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
       </div>
 
       {/* Product List */}
-      <div className="flex-1 overflow-y-auto px-5 py-2 pb-28 space-y-2">
+      <div className="flex-1 space-y-0 overflow-y-auto px-4 py-3 pb-28">
         {searchPending || isLoading ? (
             <div className="flex flex-col items-center justify-center py-20 text-slate-400 dark:text-zinc-500">
                 <Loader2 className="w-8 h-8 animate-spin mb-2 text-dewu-500" />
@@ -862,7 +863,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
           </div>
         ) : (
             <>
-                {warehouses.length > 0 && <p className="text-[10px] text-slate-400 dark:text-zinc-500 text-center mb-1">
+                {warehouses.length > 0 && <p className="mb-2 text-center text-xs text-slate-500 dark:text-zinc-400">
                   {isSelectionMode
                     ? '点击商品可勾选或取消勾选'
                     : isSearchGroupingMode
@@ -896,19 +897,19 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                 {isSearchGroupingMode ? aggregatedSearchResults.map((group) => (
                   <div
                     key={group.key}
-                    className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-slate-100 dark:border-zinc-800 shadow-sm space-y-3"
+                    className="mb-2 space-y-3 rounded-lg border border-slate-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900"
                   >
                     <div className="flex space-x-3">
                       <ProductImage src={group.imageUrl} alt={group.name} className="w-14 h-14 rounded-lg object-cover bg-slate-100 dark:bg-zinc-800 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <span className="text-[10px] font-bold text-slate-400 dark:text-zinc-500 bg-slate-50 dark:bg-zinc-800 px-1 py-0.5 rounded uppercase tracking-wider mb-1 inline-block">{group.brand}</span>
+                            <span className="mb-1 inline-block rounded bg-slate-50 px-1.5 py-0.5 text-xs font-bold uppercase text-slate-500 dark:bg-zinc-800 dark:text-zinc-400">{group.brand}</span>
                             <h3 className="text-sm font-semibold text-slate-900 dark:text-white leading-tight truncate">{group.name}</h3>
-                            <p className="text-[10px] text-slate-400 dark:text-zinc-500 mt-0.5">货号: {group.sku}</p>
+                            <p className="mt-0.5 text-xs text-slate-500 dark:text-zinc-400">货号: {group.sku}</p>
                           </div>
                           <div className="text-right shrink-0">
-                            <div className="text-[10px] text-slate-400 dark:text-zinc-500">总库存</div>
+                            <div className="text-xs text-slate-500 dark:text-zinc-400">总库存</div>
                             <div className="text-sm font-bold text-dewu-600 dark:text-dewu-400">{group.totalStock}</div>
                           </div>
                         </div>
@@ -920,20 +921,20 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                         <button
                           key={sizeRow.key}
                           onClick={() => setAggregatedActionVariants(sizeRow.variants)}
-                          className="w-full px-1.5 py-1 rounded-md border border-slate-100 dark:border-zinc-800 bg-white/90 dark:bg-zinc-900/80 text-left hover:bg-white dark:hover:bg-zinc-900 transition-colors"
+                          className="app-touch w-full rounded-md border border-slate-100 bg-white/90 px-1.5 py-1.5 text-left transition-colors hover:bg-white dark:border-zinc-800 dark:bg-zinc-900/80 dark:hover:bg-zinc-900"
                         >
                           <div className="min-w-0 flex flex-col gap-1">
                             <div className="flex items-center gap-1 flex-wrap">
-                              <span className="bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-200 text-[9px] px-1 py-0.5 rounded font-medium leading-none">{formatProductSize(sizeRow.size)}</span>
-                              <span className="text-[9px] px-1 py-0.5 rounded font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 leading-none">库存 {sizeRow.stock}</span>
+                              <span className="rounded bg-white px-1 py-0.5 text-xs font-medium leading-none text-slate-700 dark:bg-zinc-900 dark:text-zinc-200">{formatProductSize(sizeRow.size)}</span>
+                              <span className="rounded bg-green-50 px-1 py-0.5 text-xs font-medium leading-none text-green-600 dark:bg-green-900/20 dark:text-green-400">库存 {sizeRow.stock}</span>
                             </div>
                             <div className="flex items-end justify-between gap-2">
                               <div className="min-w-0">
-                                <div className="text-[9px] text-slate-400 dark:text-zinc-500 leading-none">均成本</div>
-                                <div className="text-[11px] font-bold text-slate-900 dark:text-white mt-0.5 leading-none">¥{formatCost(sizeRow.averageCost)}</div>
+                                <div className="text-xs leading-none text-slate-500 dark:text-zinc-400">均成本</div>
+                                <div className="mt-1 text-xs font-bold leading-none text-slate-900 dark:text-white">¥{formatCost(sizeRow.averageCost)}</div>
                               </div>
                               {sizeRow.sourceCount > 1 && (
-                                <span className="text-[9px] text-slate-400 dark:text-zinc-500 leading-none shrink-0">合并 {sizeRow.sourceCount}</span>
+                                <span className="shrink-0 text-xs leading-none text-slate-500 dark:text-zinc-400">合并 {sizeRow.sourceCount}</span>
                               )}
                             </div>
                           </div>
@@ -944,7 +945,7 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                 )) : products.map((product) => (
                   <div 
                     key={product.id} 
-                    className="bg-white dark:bg-zinc-900 p-2 rounded-xl border border-slate-100 dark:border-zinc-800 shadow-sm flex space-x-3 relative select-none overflow-hidden"
+                    className="relative flex min-h-[80px] select-none space-x-3 overflow-hidden border-b border-slate-100 bg-white p-3 first:rounded-t-lg last:rounded-b-lg dark:border-zinc-800 dark:bg-zinc-900"
                     onPointerDown={(event) => handlePointerDown(event, product)}
                     onPointerMove={handlePointerMove}
                     onPointerUp={handlePointerEnd}
@@ -982,12 +983,12 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                             setActiveProductId(null);
                             onEditProduct(product);
                           }}
-                          className="flex flex-col items-center group"
+                          className="app-touch flex flex-col items-center justify-center group"
                         >
                           <div className="mx-auto mb-1 w-fit rounded-full bg-white/10 p-2.5 text-white transition-colors group-active:bg-white/20">
                             <Edit size={20} />
                           </div>
-                          <span className="text-[10px] font-medium text-white">修改</span>
+                          <span className="text-xs font-medium text-white">资料</span>
                         </button>
 
                         <button
@@ -996,12 +997,12 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                             setActiveProductId(null);
                             onAdjustProduct(product);
                           }}
-                          className="flex flex-col items-center group"
+                          className="app-touch flex flex-col items-center justify-center group"
                         >
                           <div className="mx-auto mb-1 w-fit rounded-full bg-amber-500/20 p-2.5 text-amber-300 transition-colors group-active:bg-amber-500/30">
                             <Scale size={20} />
                           </div>
-                          <span className="text-[10px] font-medium text-amber-300">盘点</span>
+                          <span className="text-xs font-medium text-amber-300">盘点</span>
                         </button>
 
                         <button
@@ -1011,12 +1012,12 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                             onTransferProduct(product);
                           }}
                           disabled={product.stock <= 0 || product.status !== 'instock'}
-                          className="flex flex-col items-center group disabled:opacity-40"
+                          className="app-touch flex flex-col items-center justify-center group disabled:opacity-40"
                         >
                           <div className="mx-auto mb-1 w-fit rounded-full bg-cyan-500/20 p-2.5 text-cyan-300 transition-colors group-active:bg-cyan-500/30">
                             <ArrowRightLeft size={20} />
                           </div>
-                          <span className="text-[10px] font-medium text-cyan-300">调拨</span>
+                          <span className="text-xs font-medium text-cyan-300">调拨</span>
                         </button>
 
                         <button
@@ -1024,12 +1025,12 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                             e.stopPropagation();
                             enterSelectionMode(product.id);
                           }}
-                          className="flex flex-col items-center group"
+                          className="app-touch flex flex-col items-center justify-center group"
                         >
                           <div className="mx-auto mb-1 w-fit rounded-full bg-dewu-500/20 p-2.5 text-dewu-300 transition-colors group-active:bg-dewu-500/30">
                             <CheckCircle2 size={20} />
                           </div>
-                          <span className="text-[10px] font-medium text-dewu-300">勾选</span>
+                          <span className="text-xs font-medium text-dewu-300">勾选</span>
                         </button>
 
                         <button 
@@ -1040,12 +1041,12 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                                 setActiveProductId(null);
                             }
                           }}
-                          className="flex flex-col items-center group"
+                          className="app-touch flex flex-col items-center justify-center group"
                         >
                            <div className="mx-auto mb-1 w-fit rounded-full bg-red-500/20 p-2.5 text-red-500 transition-colors group-active:bg-red-500/30">
                             <Trash2 size={20} />
                           </div>
-                          <span className="text-[10px] font-medium text-red-500">回收站</span>
+                          <span className="text-xs font-medium text-red-500">回收站</span>
                         </button>
 
                         <button 
@@ -1053,7 +1054,8 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                                 e.stopPropagation();
                                 setActiveProductId(null);
                             }}
-                            className="absolute top-1 right-2 p-2 text-white/30 hover:text-white"
+                            className="app-icon-button absolute right-0 top-0 border-0 bg-transparent text-white/50 hover:text-white"
+                            aria-label="关闭商品操作"
                         >
                             <X size={14} />
                         </button>
@@ -1081,33 +1083,45 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
                       )}
                     </div>
                     
-                    <div className="flex-1 flex flex-col justify-between min-w-0">
+                    <div className="flex min-w-0 flex-1 flex-col justify-between pr-10">
                       <div>
                         <div className="flex justify-between items-start">
                           <div className="flex items-center space-x-2">
-                            <span className="text-[10px] font-bold text-slate-400 dark:text-zinc-500 bg-slate-50 dark:bg-zinc-800 px-1 py-0.5 rounded uppercase tracking-wider mb-1 inline-block">{product.brand}</span>
+                            <span className="mb-1 inline-block rounded bg-slate-50 px-1.5 py-0.5 text-xs font-bold uppercase text-slate-500 dark:bg-zinc-800 dark:text-zinc-400">{product.brand}</span>
                             {product.location && (
-                              <span className="flex items-center text-[10px] font-medium text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 px-1 py-0.5 rounded mb-1">
+                              <span className="mb-1 flex items-center rounded bg-indigo-50 px-1 py-0.5 text-xs font-medium text-indigo-500 dark:bg-indigo-900/20 dark:text-indigo-400">
                                 <MapPin size={8} className="mr-0.5" />
                                 {product.location}
                               </span>
                             )}
                           </div>
                         </div>
-                        <h3 className="text-xs font-semibold text-slate-900 dark:text-white line-clamp-1 leading-tight">{product.name}</h3>
-                        <p className="text-[10px] text-slate-400 dark:text-zinc-500 mt-0.5">货号: {product.sku}</p>
+                        <h3 className="line-clamp-1 text-sm font-semibold leading-tight text-slate-900 dark:text-white">{product.name}</h3>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-zinc-400">货号: {product.sku}</p>
                       </div>
                       
                       <div className="flex justify-between items-end mt-1">
                         <div className="flex items-center space-x-2">
-                          <span className="bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 text-[10px] px-1 py-0.5 rounded font-medium">{formatProductSize(product.size)}</span>
-                          <span className={`text-[10px] px-1 py-0.5 rounded font-medium ${
+                          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600 dark:bg-zinc-800 dark:text-zinc-300">{formatProductSize(product.size)}</span>
+                          <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${
                             product.stock > 10 ? 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20' : 'text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20'
                           }`}>库存 {product.stock}</span>
                         </div>
                         <span className="text-sm font-bold text-dewu-600 dark:text-dewu-400">¥{product.price}</span>
                       </div>
                     </div>
+                    <button
+                      type="button"
+                      className="app-icon-button absolute right-1 top-1 border-0 bg-transparent text-slate-500 hover:bg-slate-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                      aria-label={`管理 ${product.name}`}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setActiveProductId(product.id);
+                      }}
+                    >
+                      <MoreVertical size={20} />
+                    </button>
                   </div>
                 ))}
 
@@ -1144,7 +1158,8 @@ export const ProductList: React.FC<ProductListProps> = ({ userId, onAddClick, on
       {warehouses.length > 0 && <button
         onClick={onAddClick}
         disabled={isSelectionMode}
-        className="fixed bottom-24 right-5 w-14 h-14 bg-slate-900 dark:bg-dewu-500 rounded-full shadow-lg shadow-slate-300 dark:shadow-none flex items-center justify-center text-white active:scale-90 transition-transform z-30"
+        className="app-touch fixed bottom-24 right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-dewu-600 text-white shadow-lg shadow-dewu-200 transition-transform active:scale-95 disabled:opacity-40 dark:bg-dewu-500 dark:shadow-none"
+        aria-label="新增库存"
       >
         <Plus size={28} />
       </button>}

@@ -8,6 +8,109 @@ body,
   height: 100%;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  min-width: 320px;
+  background: #f8fafc;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #14b8a6;
+  outline-offset: 2px;
+}
+
+@layer components {
+  .app-page {
+    @apply h-full overflow-y-auto bg-slate-50 px-4 pb-28 pt-5 text-slate-900 transition-colors dark:bg-black dark:text-white;
+  }
+
+  .app-page-title {
+    @apply text-[22px] font-bold leading-7 text-slate-950 dark:text-white;
+  }
+
+  .app-section-title {
+    @apply text-base font-bold leading-6 text-slate-900 dark:text-white;
+  }
+
+  .app-body-text {
+    @apply text-sm leading-6 text-slate-600 dark:text-zinc-300;
+  }
+
+  .app-help-text {
+    @apply text-xs leading-5 text-slate-500 dark:text-zinc-400;
+  }
+
+  .app-surface {
+    @apply rounded-lg border border-slate-200 bg-white dark:border-zinc-800 dark:bg-zinc-950;
+  }
+
+  .app-list-surface {
+    @apply overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-zinc-800 dark:bg-zinc-950;
+  }
+
+  .app-touch {
+    @apply min-h-12 min-w-12 touch-manipulation;
+  }
+
+  .app-icon-button {
+    @apply app-touch inline-flex items-center justify-center rounded-lg text-slate-500 transition-colors active:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-zinc-400 dark:active:bg-zinc-800;
+  }
+
+  .app-primary-action {
+    @apply app-touch inline-flex w-full items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 text-sm font-bold text-white transition-colors active:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .app-secondary-action {
+    @apply app-touch inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition-colors active:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:active:bg-zinc-800;
+  }
+
+  .app-field-label {
+    @apply mb-2 block text-sm font-semibold text-slate-800 dark:text-zinc-100;
+  }
+
+  .app-form-control {
+    @apply min-h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-teal-500 disabled:bg-slate-100 disabled:text-slate-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white dark:disabled:bg-zinc-900;
+  }
+
+  .app-status-banner {
+    @apply flex items-center justify-between gap-3 rounded-lg border px-3 py-3 text-xs leading-5;
+  }
+
+  .app-task-shell {
+    @apply fixed inset-0 z-50 flex justify-center bg-black/45 sm:items-center sm:p-4;
+  }
+
+  .app-task-panel {
+    @apply flex h-full w-full max-w-md flex-col overflow-hidden bg-white dark:bg-black sm:h-auto sm:max-h-[92vh] sm:rounded-lg;
+  }
+
+  .app-task-header {
+    @apply flex min-h-16 shrink-0 items-center justify-between border-b border-slate-200 px-4 dark:border-zinc-800;
+  }
+
+  .app-task-body {
+    @apply flex-1 overflow-y-auto px-4 py-4;
+  }
+
+  .app-task-footer {
+    @apply shrink-0 border-t border-slate-200 bg-white px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-3 dark:border-zinc-800 dark:bg-black;
+  }
+}
+
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }

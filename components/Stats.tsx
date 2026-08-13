@@ -11,7 +11,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Bot, RefreshCw, Send, Sparkles } from 'lucide-react';
+import { Bot, ChevronRight, RefreshCw, Sparkles } from 'lucide-react';
 import type { InventoryAnalytics } from '../lib/inventoryMetrics';
 import { createDeferredComponent } from './DeferredComponent';
 
@@ -40,9 +40,9 @@ export const Stats: React.FC<StatsProps> = ({ analytics, analyticsReady, analyti
 
   if (!analyticsReady) {
     return (
-      <div className="px-5 py-6 pb-24 h-full overflow-y-auto bg-slate-50 dark:bg-black">
-        <h1 className="mb-6 text-xl font-bold text-slate-900 dark:text-white">数据统计</h1>
-        <div className={`rounded-xl border px-4 py-5 text-sm ${analyticsError ? 'border-rose-200 bg-rose-50 text-rose-600 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-300' : 'border-slate-200 bg-white text-slate-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400'}`}>
+      <div className="app-page">
+        <h1 className="app-page-title mb-5">经营统计</h1>
+        <div className={`rounded-lg border px-4 py-5 text-sm ${analyticsError ? 'border-rose-200 bg-rose-50 text-rose-600 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-300' : 'border-slate-200 bg-white text-slate-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400'}`}>
           <p>{analyticsError ? '统计同步失败，未用 0 代替真实数据。' : '正在同步服务端权威统计...'}</p>
           {analyticsError && <button type="button" onClick={onRetryData} className="mt-3 inline-flex items-center gap-1 font-semibold"><RefreshCw size={14} />重新加载</button>}
         </div>
@@ -51,102 +51,61 @@ export const Stats: React.FC<StatsProps> = ({ analytics, analyticsReady, analyti
   }
 
   return (
-    <div className="px-5 py-6 pb-24 h-full overflow-y-auto bg-slate-50 dark:bg-black transition-colors duration-300">
-      <h1 className="text-xl font-bold text-slate-900 dark:text-white mb-6">数据统计</h1>
+    <div className="app-page">
+      <header className="mb-5">
+        <p className="text-xs font-semibold text-teal-600 dark:text-teal-400">本自然月</p>
+        <h1 className="app-page-title mt-0.5">经营统计</h1>
+      </header>
 
       {analyticsError && (
-        <div className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-[11px] text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
+        <div className="app-status-banner mb-4 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
           <span>{analyticsReady ? '统计刷新失败，当前显示上次成功结果，可能已过期。' : '统计同步失败，暂不显示为 0。'}</span>
           <button type="button" onClick={onRetryData} className="flex shrink-0 items-center gap-1 font-semibold"><RefreshCw size={12} />重试</button>
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-3 mb-6">
-        <div className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-slate-100 dark:border-zinc-800 shadow-sm flex flex-col justify-between min-h-[80px]">
-          <p className="text-[10px] text-slate-400 dark:text-zinc-500 mb-1">本月销售额</p>
-          <p className="text-sm font-bold text-slate-900 dark:text-white">¥{monthly.salesAmount.toLocaleString()}</p>
-          <p className="text-[10px] text-slate-300 dark:text-zinc-600 font-medium mt-1">本自然月成交金额</p>
+      <section className="app-surface mb-4 overflow-hidden" aria-labelledby="monthly-result-title">
+        <h2 id="monthly-result-title" className="sr-only">本月核心经营结果</h2>
+        <div className="grid grid-cols-2 divide-x divide-slate-100 border-b border-slate-100 dark:divide-zinc-800 dark:border-zinc-800">
+          <div className="min-w-0 p-4">
+            <p className="text-xs font-medium text-slate-500 dark:text-zinc-400">本月销售额</p>
+            <p className="mt-1 truncate text-[26px] font-bold leading-8 text-slate-950 dark:text-white">¥{monthly.salesAmount.toLocaleString()}</p>
+            <p className="mt-1 text-xs text-slate-400">出库 {monthly.outboundCount} 件</p>
+          </div>
+          <div className="min-w-0 p-4">
+            <p className="text-xs font-medium text-slate-500 dark:text-zinc-400">实际净利润</p>
+            <p className={`mt-1 truncate text-[26px] font-bold leading-8 ${monthly.actualProfitCount === 0 ? 'text-slate-400' : monthly.actualNetProfitAmount >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>{monthly.actualProfitCount === 0 ? '—' : `¥${monthly.actualNetProfitAmount.toLocaleString()}`}</p>
+            <p className="mt-1 text-xs text-slate-400">{monthly.actualProfitCount === 0 ? '暂无可计算记录' : `覆盖 ${monthly.actualProfitCoverageRate.toFixed(0)}% 已记成本件数`}</p>
+          </div>
         </div>
-        <div className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-slate-100 dark:border-zinc-800 shadow-sm flex flex-col justify-between min-h-[80px]">
-          <p className="text-[10px] text-slate-400 dark:text-zinc-500 mb-1">本月销售成本</p>
-          <p className="text-sm font-bold text-slate-900 dark:text-white">¥{monthly.costAmount.toLocaleString()}</p>
-          <p className="text-[10px] text-slate-300 dark:text-zinc-600 font-medium mt-1">仅统计已记录成本</p>
+        <div className="grid grid-cols-3 divide-x divide-slate-100 dark:divide-zinc-800">
+          <div className="px-3 py-4"><p className="text-xs text-slate-500">预计净利润</p><p className="mt-1 truncate text-base font-bold">{monthly.estimatedProfitCount === 0 ? '—' : `¥${monthly.estimatedNetProfitAmount.toLocaleString()}`}</p></div>
+          <div className="px-3 py-4"><p className="text-xs text-slate-500">待结算</p><p className={`mt-1 text-base font-bold ${monthly.pendingSettlementCount > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-emerald-600'}`}>{monthly.outboundCount === 0 ? '—' : `${monthly.pendingSettlementCount} 件`}</p></div>
+          <div className="px-3 py-4"><p className="text-xs text-slate-500">结算覆盖</p><p className="mt-1 text-base font-bold">{monthly.outboundCount === 0 ? '—' : `${monthly.settlementCoverageRate.toFixed(0)}%`}</p></div>
         </div>
-        <div className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-slate-100 dark:border-zinc-800 shadow-sm flex flex-col justify-between min-h-[80px]">
-          <p className="text-[10px] text-slate-400 dark:text-zinc-500 mb-1">本月毛利润</p>
-          <p className={`text-sm font-bold ${monthly.grossProfitAmount >= 0 ? 'text-slate-900 dark:text-white' : 'text-red-500'}`}>
-            ¥{monthly.grossProfitAmount.toLocaleString()}
-          </p>
-          <p className="text-[10px] text-slate-300 dark:text-zinc-600 font-medium mt-1">已计成本销售额减成本</p>
-        </div>
+      </section>
 
-        <div className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-slate-100 dark:border-zinc-800 shadow-sm flex flex-col justify-between min-h-[80px]">
-          <p className="text-[10px] text-slate-400 dark:text-zinc-500 mb-1">入库件数</p>
-          <p className="text-sm font-bold text-slate-900 dark:text-white">{monthly.inboundCount}</p>
-          <p className="text-[10px] text-slate-300 dark:text-zinc-600 font-medium mt-1">本月累计</p>
-        </div>
-        <div className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-slate-100 dark:border-zinc-800 shadow-sm flex flex-col justify-between min-h-[80px]">
-          <p className="text-[10px] text-slate-400 dark:text-zinc-500 mb-1">出库件数</p>
-          <p className="text-sm font-bold text-slate-900 dark:text-white">{monthly.outboundCount}</p>
-          <p className="text-[10px] text-slate-300 dark:text-zinc-600 font-medium mt-1">本月累计</p>
-        </div>
-        <div className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-slate-100 dark:border-zinc-800 shadow-sm flex flex-col justify-between min-h-[80px]">
-          <p className="text-[10px] text-slate-400 dark:text-zinc-500 mb-1">本月毛利率</p>
-          <p className="text-sm font-bold text-slate-900 dark:text-white">{monthly.grossMarginRate.toFixed(1)}%</p>
-          <p className="text-[10px] text-slate-300 dark:text-zinc-600 font-medium mt-1">成本覆盖 {monthly.costCoverageRate.toFixed(0)}%</p>
-        </div>
-      </div>
+      <section className="app-list-surface mb-4" aria-labelledby="accounting-details-title">
+        <div className="border-b border-slate-100 px-4 py-3 dark:border-zinc-800"><h2 id="accounting-details-title" className="app-section-title">成本与毛利口径</h2></div>
+        {[
+          ['销售成本', `¥${monthly.costAmount.toLocaleString()}`, '仅统计已记录成本'],
+          ['毛利润', `¥${monthly.grossProfitAmount.toLocaleString()}`, '已计成本销售额减成本'],
+          ['毛利率', `${monthly.grossMarginRate.toFixed(1)}%`, `成本覆盖 ${monthly.costCoverageRate.toFixed(0)}%`],
+          ['本月入库', `${monthly.inboundCount} 件`, '本自然月累计'],
+        ].map(([label, value, help]) => <div key={label} className="flex min-h-14 items-center justify-between gap-3 border-b border-slate-100 px-4 py-2 last:border-b-0 dark:border-zinc-800"><div><p className="text-sm font-medium">{label}</p><p className="text-xs text-slate-400">{help}</p></div><strong className="shrink-0 text-sm">{value}</strong></div>)}
+      </section>
 
       {hasMissingCosts && (
-        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-xs leading-5 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
           本月有 {monthly.missingCostCount} 件出库缺少成本，毛利润和毛利率暂不包含这些记录。
         </div>
       )}
 
-      <div className="mb-6 rounded-xl border border-slate-100 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-bold text-slate-800 dark:text-white">本月净利润口径</h2><span className="text-[10px] text-slate-400">自然月</span></div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-lg bg-indigo-50 p-3 dark:bg-indigo-950/20"><p className="text-[10px] text-indigo-500">预计净利润</p><p className="mt-1 text-base font-bold text-indigo-700 dark:text-indigo-300">{monthly.estimatedProfitCount === 0 ? '—' : `¥${monthly.estimatedNetProfitAmount.toLocaleString()}`}</p><p className="mt-1 text-[10px] text-indigo-400">{monthly.estimatedProfitCount === 0 ? '暂无可计算记录' : `已记成本件数中覆盖 ${monthly.estimatedProfitCoverageRate.toFixed(0)}%`}</p></div>
-          <div className="rounded-lg bg-emerald-50 p-3 dark:bg-emerald-950/20"><p className="text-[10px] text-emerald-600">实际净利润</p><p className="mt-1 text-base font-bold text-emerald-700 dark:text-emerald-300">{monthly.actualProfitCount === 0 ? '—' : `¥${monthly.actualNetProfitAmount.toLocaleString()}`}</p><p className="mt-1 text-[10px] text-emerald-500">{monthly.actualProfitCount === 0 ? '暂无可计算记录' : `已记成本件数中覆盖 ${monthly.actualProfitCoverageRate.toFixed(0)}%`}</p></div>
-        </div>
-        <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 text-[11px] dark:border-zinc-800">{monthly.outboundCount === 0 ? <span className="text-slate-400">本月暂无出库</span> : <><span className="text-slate-500">全部出库件数中，实际结算覆盖 {monthly.settlementCoverageRate.toFixed(0)}%</span><span className={monthly.pendingSettlementCount > 0 ? 'text-amber-600' : 'text-emerald-600'}>{monthly.pendingSettlementCount > 0 ? `待补录 ${monthly.pendingSettlementCount} 件` : '本月已全部补录'}</span></>}</div>
-      </div>
-
-      <div
-        onClick={() => setIsAIModalOpen(true)}
-        className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm mb-6 overflow-hidden flex flex-col cursor-pointer hover:shadow-md transition-shadow group"
-      >
-        <div className="bg-cyan-600 p-3 flex items-center justify-between">
-          <div className="flex items-center space-x-2 text-white">
-            <Bot size={18} />
-            <span className="text-sm font-bold">AI 助手</span>
-          </div>
-          <span className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded-full group-hover:bg-white/30 transition-colors">点击展开</span>
-        </div>
-
-        <div className="p-4 bg-slate-50 dark:bg-black h-40 overflow-y-auto space-y-3 pointer-events-none">
-          <div className="flex items-start space-x-2">
-            <div className="w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center flex-shrink-0">
-              <Sparkles size={12} className="text-indigo-600 dark:text-indigo-400" />
-            </div>
-            <div className="bg-white dark:bg-zinc-800 p-2.5 rounded-2xl rounded-tl-none border border-slate-100 dark:border-zinc-700 text-xs text-slate-600 dark:text-zinc-300 shadow-sm">
-              👋 嗨！我是你的智能助手。本月已记录成本商品的毛利率为 <span className="font-bold text-slate-900 dark:text-white">{monthly.grossMarginRate.toFixed(1)}%</span>，点击这里分析库存和销售趋势。
-            </div>
-          </div>
-        </div>
-
-        <div className="p-3 bg-white dark:bg-zinc-900 border-t border-slate-100 dark:border-zinc-800 flex items-center space-x-2 pointer-events-none">
-          <input
-            type="text"
-            placeholder="点击向 AI 提问..."
-            readOnly
-            className="flex-1 bg-slate-50 dark:bg-black text-xs py-2 px-3 rounded-lg outline-none focus:ring-1 focus:ring-indigo-500 transition-all dark:text-white dark:placeholder-zinc-600"
-          />
-          <button className="p-2 bg-indigo-600 text-white rounded-lg active:scale-95 transition-transform">
-            <Send size={14} />
-          </button>
-        </div>
-      </div>
+      <button type="button" onClick={() => setIsAIModalOpen(true)} className="app-touch mb-4 flex w-full items-center gap-3 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-left dark:border-violet-900/50 dark:bg-violet-950/20" aria-label="打开 AI 经营分析">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-300"><Bot size={20} /></div>
+        <div className="min-w-0 flex-1"><p className="text-sm font-bold text-violet-900 dark:text-violet-200">AI 经营分析</p><p className="mt-0.5 text-xs text-violet-600 dark:text-violet-300">基于同一账本口径提问，不替代真实结算</p></div>
+        <ChevronRight size={18} className="shrink-0 text-violet-500" />
+      </button>
 
       {isAIModalOpen && (
         <AIManagementModal
@@ -156,8 +115,8 @@ export const Stats: React.FC<StatsProps> = ({ analytics, analyticsReady, analyti
         />
       )}
 
-      <div className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm mb-6">
-        <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-4">近30天销售额趋势</h3>
+      <div className="app-surface mb-4 p-4">
+        <h3 className="app-section-title mb-4">近30天销售额趋势</h3>
         <div className="h-32 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={salesChartData}>
@@ -181,8 +140,8 @@ export const Stats: React.FC<StatsProps> = ({ analytics, analyticsReady, analyti
         </div>
       </div>
 
-      <div className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm mb-6">
-        <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-4">库存品牌占比</h3>
+      <div className="app-surface mb-4 p-4">
+        <h3 className="app-section-title mb-4">库存品牌占比</h3>
         <div className="flex items-center">
           <div className="h-32 w-1/2">
             <ResponsiveContainer width="100%" height="100%">
@@ -221,8 +180,8 @@ export const Stats: React.FC<StatsProps> = ({ analytics, analyticsReady, analyti
         </div>
       </div>
 
-      <div className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm">
-        <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-4">历史热销排行 TOP 5</h3>
+      <div className="app-surface p-4">
+        <h3 className="app-section-title mb-4">历史热销排行 TOP 5</h3>
         <div className="space-y-4">
           {topProducts.map((item, idx) => (
             <div key={item.sku || `${item.name}-${idx}`} className="flex items-center space-x-3">
@@ -232,8 +191,8 @@ export const Stats: React.FC<StatsProps> = ({ analytics, analyticsReady, analyti
               <div className="flex-1">
                 <div className="mb-1 flex min-w-0 items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="truncate text-xs font-medium text-slate-700 dark:text-zinc-300">{item.name}</div>
-                    <div className="truncate text-[10px] text-slate-400 dark:text-zinc-500">货号 {item.sku || '未记录'}</div>
+                    <div className="truncate text-sm font-medium text-slate-700 dark:text-zinc-300">{item.name}</div>
+                    <div className="truncate text-xs text-slate-400 dark:text-zinc-500">货号 {item.sku || '未记录'}</div>
                   </div>
                   <span className="shrink-0 text-xs text-slate-400 dark:text-zinc-500">{item.sold} 件</span>
                 </div>

@@ -73,8 +73,10 @@ export const Profile: React.FC<ProfileProps> = ({
   // Toggle Dark Mode
   // useEffect logic removed, controlled by parent App.tsx now
 
-  const menuGroups: MenuItem[][] = [
-    [
+  const menuGroups: Array<{ title: string; items: MenuItem[] }> = [
+    {
+      title: '数据与安全',
+      items: [
       {
         icon: ShieldAlert,
         label: '数据体检',
@@ -83,18 +85,25 @@ export const Profile: React.FC<ProfileProps> = ({
       },
       { icon: ArchiveRestore, label: '回收站', action: onRecycleBinClick },
       { icon: Download, label: '导出与恢复', action: onExportClick },
+    ]},
+    {
+      title: '经营设置',
+      items: [
       { icon: Calculator, label: '费用方案', action: onFeeSchemesClick },
-    ],
-    [
       { 
         icon: Moon, 
         label: '深夜模式', 
         value: isDarkMode ? <ToggleRight className="text-dewu-500" size={24} /> : <ToggleLeft className="text-slate-300" size={24} />,
         action: onToggleTheme
       },
-      { icon: Shield, label: '账号安全', action: () => setShowSecurityModal(true) },
-      { icon: LifeBuoy, label: '支持与诊断', action: () => setShowSupportModal(true) },
-    ]
+    ]},
+    {
+      title: '账号与支持',
+      items: [
+        { icon: Shield, label: '账号安全', action: () => setShowSecurityModal(true) },
+        { icon: LifeBuoy, label: '支持与诊断', action: () => setShowSupportModal(true) },
+      ],
+    },
   ];
 
   const handleAvatarClick = () => {
@@ -128,7 +137,7 @@ export const Profile: React.FC<ProfileProps> = ({
   };
 
   return (
-    <div className="h-full bg-slate-50 dark:bg-black overflow-y-auto pb-24 transition-colors duration-300">
+    <div className="h-full overflow-y-auto bg-slate-50 pb-24 transition-colors duration-300 dark:bg-black">
       {/* Hidden File Input */}
       <input 
         type="file" 
@@ -139,11 +148,14 @@ export const Profile: React.FC<ProfileProps> = ({
       />
 
       {/* Header Profile */}
-      <div className="bg-white dark:bg-zinc-900 p-6 pt-10 pb-8 border-b border-slate-100 dark:border-zinc-800 transition-colors duration-300">
+      <div className="border-b border-slate-100 bg-white px-4 pb-6 pt-7 transition-colors duration-300 dark:border-zinc-800 dark:bg-zinc-900">
         <div className="flex items-center space-x-4">
           <div 
-            className="relative w-20 h-20 rounded-full bg-slate-200 dark:bg-zinc-800 border-4 border-slate-50 dark:border-zinc-700 shadow-sm group cursor-pointer"
+            className="group relative h-16 w-16 cursor-pointer rounded-full border-2 border-slate-100 bg-slate-200 dark:border-zinc-700 dark:bg-zinc-800"
             onClick={handleAvatarClick}
+            role="button"
+            tabIndex={0}
+            aria-label="更换头像"
           >
             {avatarUrl ? (
               <img src={avatarUrl} alt="User" className="w-full h-full object-cover rounded-full" />
@@ -166,10 +178,10 @@ export const Profile: React.FC<ProfileProps> = ({
                     className="border-b-2 border-dewu-500 outline-none text-xl font-bold text-slate-900 dark:text-white w-32 bg-transparent"
                     autoFocus
                   />
-                  <button onClick={handleSaveName} className="p-1 bg-green-50 text-green-600 rounded-full">
+                  <button onClick={handleSaveName} className="app-icon-button border-0 bg-green-50 text-green-600" aria-label="保存用户名">
                     <Check size={16} />
                   </button>
-                  <button onClick={() => setIsEditing(false)} className="p-1 bg-red-50 text-red-600 rounded-full">
+                  <button onClick={() => setIsEditing(false)} className="app-icon-button border-0 bg-red-50 text-red-600" aria-label="取消修改用户名">
                     <X size={16} />
                   </button>
                 </div>
@@ -178,7 +190,8 @@ export const Profile: React.FC<ProfileProps> = ({
                   <h2 className="text-xl font-bold text-slate-900 dark:text-white">{username}</h2>
                   <button 
                     onClick={handleStartEdit}
-                    className="p-1.5 text-slate-400 hover:text-dewu-500 hover:bg-slate-50 dark:hover:bg-zinc-800 rounded-full transition-colors"
+                    className="app-icon-button border-0 bg-transparent text-slate-400 hover:bg-slate-50 hover:text-dewu-500 dark:hover:bg-zinc-800"
+                    aria-label="修改用户名"
                   >
                     <Edit2 size={14} />
                   </button>
@@ -190,7 +203,7 @@ export const Profile: React.FC<ProfileProps> = ({
           </div>
         </div>
         
-        <div className="grid grid-cols-3 gap-4 mt-8">
+        <div className="mt-6 grid grid-cols-3 gap-4">
           <div className="text-center">
             <div className="text-lg font-bold text-slate-900 dark:text-white">{totalStock}</div>
             <div className="text-xs text-slate-400 dark:text-zinc-500 mt-1">总库存</div>
@@ -207,15 +220,17 @@ export const Profile: React.FC<ProfileProps> = ({
       </div>
 
       {/* Menu Groups */}
-      <div className="px-5 py-6 space-y-6">
+      <div className="space-y-5 px-4 py-5">
         {menuGroups.map((group, gIdx) => (
-          <div key={gIdx} className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 overflow-hidden transition-colors duration-300">
-            {group.map((item, iIdx) => (
+          <section key={group.title} aria-labelledby={`profile-group-${gIdx}`}>
+            <h3 id={`profile-group-${gIdx}`} className="app-section-title mb-2 px-1">{group.title}</h3>
+            <div className="app-list-surface">
+            {group.items.map((item, iIdx) => (
               <button 
-                key={iIdx}
+                key={item.label}
                 onClick={item.action}
-                className={`w-full flex items-center justify-between p-4 active:bg-slate-50 dark:active:bg-zinc-800 transition-colors ${
-                  iIdx !== group.length - 1 ? 'border-b border-slate-50 dark:border-zinc-800' : ''
+                className={`app-touch flex w-full items-center justify-between px-4 text-left transition-colors active:bg-slate-50 dark:active:bg-zinc-800 ${
+                  iIdx !== group.items.length - 1 ? 'border-b border-slate-100 dark:border-zinc-800' : ''
                 }`}
               >
                 <div className="flex items-center space-x-3">
@@ -237,17 +252,18 @@ export const Profile: React.FC<ProfileProps> = ({
                 </div>
               </button>
             ))}
-          </div>
+            </div>
+          </section>
         ))}
 
         <button 
           onClick={() => setShowLogoutConfirm(true)}
-          className="w-full bg-white dark:bg-zinc-900 text-red-500 font-medium text-sm p-4 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm flex items-center justify-center space-x-2 active:bg-red-50 dark:active:bg-red-900/10 transition-colors">
+          className="app-secondary-action w-full space-x-2 text-sm font-medium text-red-500 active:bg-red-50 dark:active:bg-red-900/10">
           <LogOut size={18} />
           <span>退出登录</span>
         </button>
 
-        <div className="text-center text-[10px] leading-4 text-slate-400 dark:text-zinc-600">
+        <div className="text-center text-xs leading-5 text-slate-500 dark:text-zinc-500">
           <p>{APP_NAME} · Version {appVersion}</p>
           <p>{APP_DISCLAIMER}</p>
           <div className="mt-1 flex justify-center gap-3"><button onClick={() => openExternalUrl(PUBLIC_LINKS.privacy)} className="underline">隐私说明</button><button onClick={() => openExternalUrl(PUBLIC_LINKS.accountDeletion)} className="underline">账号删除说明</button><button onClick={() => setShowSupportModal(true)} className="underline">支持与诊断</button></div>
