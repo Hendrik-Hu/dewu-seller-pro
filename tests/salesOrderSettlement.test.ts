@@ -5,6 +5,7 @@ import test from 'node:test';
 const sql = readFileSync(new URL('../supabase/migrations/20260813030000_link_sales_order_settlement.sql', import.meta.url), 'utf8');
 const restoreHardening = readFileSync(new URL('../supabase/migrations/20260813040000_harden_sales_order_backup_restore.sql', import.meta.url), 'utf8');
 const modal = readFileSync(new URL('../components/SalesOrdersModal.tsx', import.meta.url), 'utf8');
+const outboundModal = readFileSync(new URL('../components/OutboundModal.tsx', import.meta.url), 'utf8');
 
 test('actual settlement advances an authenticated order in the same transaction', () => {
   assert.match(sql, /before insert on public\.outbound_settlement_audit/i);
@@ -33,4 +34,12 @@ test('order restore hardening rejects ambiguous links and malformed event snapsh
   assert.match(restoreHardening, /事件包含未知字段/);
   assert.match(restoreHardening, /fromStatus/);
   assert.match(restoreHardening, /128 KB 上限/);
+});
+
+test('sales order drafts preserve optional order references without changing quick ledger mode', () => {
+  assert.match(outboundModal, /订单补充/);
+  assert.match(outboundModal, /externalOrderNo\.trim\(\)/);
+  assert.match(outboundModal, /orderNote\.trim\(\)/);
+  assert.match(outboundModal, /executionMode === 'sales_order' \? \{/);
+  assert.match(outboundModal, /externalOrderNo, orderNote/);
 });

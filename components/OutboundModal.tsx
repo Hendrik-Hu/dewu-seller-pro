@@ -15,7 +15,15 @@ interface OutboundModalProps {
   isOpen: boolean;
   onClose: () => void;
   userId: string;
-  onOutbound: (product: Product, sellingPrice: number, quantity: number, feeSelection: OutboundFeeSelection, operationId: string, mode: OutboundExecutionMode) => Promise<void> | void;
+  onOutbound: (
+    product: Product,
+    sellingPrice: number,
+    quantity: number,
+    feeSelection: OutboundFeeSelection,
+    operationId: string,
+    mode: OutboundExecutionMode,
+    orderMetadata?: { externalOrderNo?: string; note?: string },
+  ) => Promise<void> | void;
 }
 
 const createOperationId = () => globalThis.crypto?.randomUUID?.() || `outbound-${Date.now()}`;
@@ -55,6 +63,8 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, u
   const [targetPricingValue, setTargetPricingValue] = useState('');
   const [targetPricingRequested, setTargetPricingRequested] = useState(false);
   const [executionMode, setExecutionMode] = useState<OutboundExecutionMode>('sales_order');
+  const [externalOrderNo, setExternalOrderNo] = useState('');
+  const [orderNote, setOrderNote] = useState('');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -143,8 +153,10 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, u
       setSubmitted(Boolean(draft?.submitted));
       setSubmittedSchemeUpdatedAt(String(draft?.submittedSchemeUpdatedAt || ''));
       setExecutionMode(draft?.executionMode === 'quick_ledger' ? 'quick_ledger' : 'sales_order');
+      setExternalOrderNo(String(draft?.externalOrderNo ?? ''));
+      setOrderNote(String(draft?.orderNote ?? ''));
     }).catch(() => {
-      setSellingPrice(''); setQuantity(1); setManualFeeEnabled(false); setManualFee(''); setOperationId(createOperationId()); setSubmitted(false); setSubmittedSchemeUpdatedAt('');
+      setSellingPrice(''); setQuantity(1); setManualFeeEnabled(false); setManualFee(''); setOperationId(createOperationId()); setSubmitted(false); setSubmittedSchemeUpdatedAt(''); setExternalOrderNo(''); setOrderNote('');
     }).finally(() => { if (mounted) { setDraftProductId(selectedProduct.id); setDraftReady(true); } });
     return () => { mounted = false; };
   }, [draftProductId, feeSchemes, selectedProduct, userId]);
@@ -152,9 +164,9 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, u
   useEffect(() => {
     if (!selectedProduct || !draftReady || draftProductId !== selectedProduct.id) return;
     Preferences.set({ key: getDraftKey(userId, selectedProduct.id), value: JSON.stringify({
-      sellingPrice, quantity, selectedSchemeId, manualFeeEnabled, manualFee, operationId, submitted, submittedSchemeUpdatedAt, executionMode,
+      sellingPrice, quantity, selectedSchemeId, manualFeeEnabled, manualFee, operationId, submitted, submittedSchemeUpdatedAt, executionMode, externalOrderNo, orderNote,
     }) }).catch((error) => console.warn('Failed to save outbound draft', error));
-  }, [draftProductId, draftReady, executionMode, manualFee, manualFeeEnabled, operationId, quantity, selectedProduct, selectedSchemeId, sellingPrice, submitted, submittedSchemeUpdatedAt, userId]);
+  }, [draftProductId, draftReady, executionMode, externalOrderNo, manualFee, manualFeeEnabled, operationId, orderNote, quantity, selectedProduct, selectedSchemeId, sellingPrice, submitted, submittedSchemeUpdatedAt, userId]);
 
   const selectedScheme = feeSchemes.find((item) => item.id === selectedSchemeId);
   const feeQuote = useMemo(() => {
@@ -211,6 +223,8 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, u
     setTargetPricingOpen(false);
     setTargetPricingValue('');
     setTargetPricingRequested(false);
+    setExternalOrderNo('');
+    setOrderNote('');
     onClose();
   };
 
@@ -224,6 +238,8 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, u
     setTargetPricingOpen(false);
     setTargetPricingValue('');
     setTargetPricingRequested(false);
+    setExternalOrderNo('');
+    setOrderNote('');
   };
 
   const handleConfirmOutbound = async () => {
@@ -246,9 +262,12 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, u
       const lockedSchemeUpdatedAt = submitted ? submittedSchemeUpdatedAt : selectedScheme?.updatedAt || '';
       setSubmittedSchemeUpdatedAt(lockedSchemeUpdatedAt);
       await Preferences.set({ key: getDraftKey(userId, selectedProduct.id), value: JSON.stringify({
-        sellingPrice, quantity: finalQuantity, selectedSchemeId, manualFeeEnabled, manualFee, operationId, submitted: true, submittedSchemeUpdatedAt: lockedSchemeUpdatedAt, executionMode,
+        sellingPrice, quantity: finalQuantity, selectedSchemeId, manualFeeEnabled, manualFee, operationId, submitted: true, submittedSchemeUpdatedAt: lockedSchemeUpdatedAt, executionMode, externalOrderNo, orderNote,
       }) });
-      await onOutbound(selectedProduct, finalPrice, finalQuantity, selection, operationId, executionMode);
+      await onOutbound(selectedProduct, finalPrice, finalQuantity, selection, operationId, executionMode, executionMode === 'sales_order' ? {
+        externalOrderNo: externalOrderNo.trim() || undefined,
+        note: orderNote.trim() || undefined,
+      } : undefined);
       await Preferences.remove({ key: getDraftKey(userId, selectedProduct.id) });
       handleClose();
     } catch (error) {
@@ -400,6 +419,13 @@ export const OutboundModal: React.FC<OutboundModalProps> = ({ isOpen, onClose, u
                 </div>
                 <p className="mt-2 text-xs leading-5 text-slate-500">{executionMode === 'sales_order' ? '先预留库存并进入待发货；确认发货后才形成出库流水。' : '适合已经完成交易的补记场景，会立即扣库存并形成出库流水。'}</p>
               </div>
+              {executionMode === 'sales_order' && <details className="group border-t border-slate-200 pt-2">
+                <summary className="app-touch flex cursor-pointer list-none items-center justify-between text-xs font-semibold text-slate-600">订单补充 <span className="font-normal text-slate-400">订单号、备注（选填）</span></summary>
+                <div className="grid gap-3 pb-1 pt-2">
+                  <div><label className="mb-1.5 block text-xs font-medium text-slate-600">平台订单号</label><input type="text" value={externalOrderNo} onChange={(event) => setExternalOrderNo(event.target.value)} maxLength={120} disabled={submitted} placeholder="便于后续核对平台订单" className="app-form-control bg-white" /></div>
+                  <div><label className="mb-1.5 block text-xs font-medium text-slate-600">订单备注</label><input type="text" value={orderNote} onChange={(event) => setOrderNote(event.target.value)} maxLength={500} disabled={submitted} placeholder="例如买家要求、发货提醒" className="app-form-control bg-white" /></div>
+                </div>
+              </details>}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-slate-500 mb-1.5">出库数量</label>

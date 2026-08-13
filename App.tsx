@@ -703,12 +703,12 @@ export default function App() {
     }
   };
 
-  const handleOutboundProduct = async (product: Product, price: number, quantity: number, feeSelection: OutboundFeeSelection, operationId: string, mode: OutboundExecutionMode, platform: string = '得物') => {
+  const handleOutboundProduct = async (product: Product, price: number, quantity: number, feeSelection: OutboundFeeSelection, operationId: string, mode: OutboundExecutionMode, orderMetadata?: { externalOrderNo?: string; note?: string }, platform: string = '得物') => {
     if (!session?.user?.id) return;
     
     try {
       if (mode === 'sales_order') {
-        await createSalesOrder({ product, userId: session.user.id, unitSalePrice: price, quantity, platform, feeSelection, operationId });
+        await createSalesOrder({ product, userId: session.user.id, unitSalePrice: price, quantity, platform, feeSelection, operationId, ...orderMetadata });
       } else {
         await outboundProduct({ product, userId: session.user.id, salePrice: price, quantity, platform, feeSelection, operationId });
       }
